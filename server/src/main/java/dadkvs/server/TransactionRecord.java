@@ -18,7 +18,7 @@ public class TransactionRecord {
         this.prepare_key = 0;
         this.prepare_value = 0;
 	this.timestamp = -1;
-     }
+    }
 
     public TransactionRecord(int key1, int v1, int key2, int v2, int wkey, int wval) {
         this.read1_key = key1;

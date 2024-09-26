@@ -4,13 +4,13 @@
 syntax = "proto3";
 package dadkvs;
 
-message PhaseOneRequest {
+message PhaseOneRequest { // 1. Prepare
   int32 phase1config    = 1;
   int32 phase1index     = 2;
   int32 phase1timestamp = 3;
 }
 
-message PhaseOneReply {
+message PhaseOneReply { // 2. Promise
   int32 phase1config    = 1;
   int32 phase1index     = 2;
   bool  phase1accepted  = 3;
@@ -18,27 +18,27 @@ message PhaseOneReply {
   int32 phase1timestamp = 5;
 }
 
-message PhaseTwoRequest {
+message PhaseTwoRequest { // 3. Accept
   int32 phase2config    = 1;
   int32 phase2index     = 2;
   int32 phase2value     = 3;
   int32 phase2timestamp = 4;
 }
 
-message PhaseTwoReply {
+message PhaseTwoReply { // 4. Accepted
   int32 phase2config   = 1;
   int32 phase2index    = 2;
   bool  phase2accepted = 3;
 }
 
-message LearnRequest {
+message LearnRequest { // Inform Learners of Accepted transaction
   int32 learnconfig    = 1;
   int32 learnindex     = 2;
   int32 learnvalue     = 3;
   int32 learntimestamp = 4;
 }
 
-message LearnReply {
+message LearnReply {  // Learners confirm recieving Accepted messages
   int32 learnconfig   = 1;
   int32 learnindex    = 2;
   bool  learnaccepted = 3;

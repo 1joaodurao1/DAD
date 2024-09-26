@@ -33,140 +33,139 @@ public class DadkvsClient {
     Random rnd;
     String host;
     int port;
-    
+
     String[] targets;
     ManagedChannel[] channels;
     DadkvsMainServiceGrpc.DadkvsMainServiceStub[] async_stubs;
 
-    
+
     public DadkvsClient () {
-	interactive_mode = false;
-	key_range = 5;
-	sleep_range = 5;
-	loop_size = 1;
-	n_servers = 5;
-	client_id = 1;
-	port = 8080;
-	host = "localhost";
-	sequence_number = 0;
-	responses_needed = 1;
-	rnd = new Random();
-	targets = new String[n_servers];
+		interactive_mode = false;
+		key_range = 5;
+		sleep_range = 5;
+		loop_size = 1;
+		n_servers = 5;
+		client_id = 1;
+		port = 8080;
+		host = "localhost";
+		sequence_number = 0;
+		responses_needed = 1;
+		rnd = new Random();
+		targets = new String[n_servers];
     }
 
 
 
     private boolean doCommit (int key1, int key1_version, int key2, int key2_version, int write_key, int write_value) {
-	sequence_number = sequence_number+1;
-	int reqid = sequence_number*100 + client_id;
-	boolean result = false;
+		sequence_number = sequence_number + 1;
+		int reqid = sequence_number*100 + client_id;
+		boolean result = false;
 
-	DadkvsMain.CommitRequest.Builder commit_request = DadkvsMain.CommitRequest.newBuilder();
+		DadkvsMain.CommitRequest.Builder commit_request = DadkvsMain.CommitRequest.newBuilder();
 
-	commit_request.setReqid(reqid)
-	    .setKey1(key1)
-	    .setVersion1(key1_version)
-	    .setKey2(key2)
-	    .setVersion2(key2_version)
-	    .setWritekey(write_key)
-	    .setWriteval(write_value);
+		commit_request.setReqid(reqid)
+			.setKey1(key1)
+			.setVersion1(key1_version)
+			.setKey2(key2)
+			.setVersion2(key2_version)
+			.setWritekey(write_key)
+			.setWriteval(write_value);
 
-	System.out.println("Reqid " + reqid);
-	System.out.println("Read1 key " + key1 + " with version " + key1_version);
-	System.out.println("Read1 key " + key2 + " with version " + key2_version);
-	System.out.println("Write key " + write_key + " with value " + write_value);
-	
-	
-	ArrayList<DadkvsMain.CommitReply> commit_responses = new ArrayList<DadkvsMain.CommitReply>();
-	GenericResponseCollector<DadkvsMain.CommitReply> commit_collector = new GenericResponseCollector<DadkvsMain.CommitReply> (commit_responses, n_servers);
-	
-	for (int i = 0; i < n_servers; i++) {
-	    CollectorStreamObserver<DadkvsMain.CommitReply> commit_observer = new CollectorStreamObserver<DadkvsMain.CommitReply>(commit_collector);
-	    async_stubs[i].committx(commit_request.build(), commit_observer);
-	}
-	commit_collector.waitForTarget(responses_needed);
-	if (commit_responses.size() >= responses_needed) {
-	    Iterator<DadkvsMain.CommitReply> commit_iterator = commit_responses.iterator();
-	    DadkvsMain.CommitReply commit_reply = commit_iterator.next ();
-	    System.out.println("Reqid = " + reqid + " id in reply = " + commit_reply.getReqid());
-	    result = commit_reply.getAck();
-	    if (result) {
-		System.out.println("Committed key " + commit_request.getWritekey() + " with value " + commit_request.getWriteval());
-	    } else {
-		System.out.println("Commit Failed");
-	    }
-	}
-	else
-	    System.out.println("Panic...error commiting");
-	return result;
+		System.out.println("Reqid " + reqid);
+		System.out.println("Read1 key " + key1 + " with version " + key1_version);
+		System.out.println("Read1 key " + key2 + " with version " + key2_version);
+		System.out.println("Write key " + write_key + " with value " + write_value);
+
+		ArrayList<DadkvsMain.CommitReply> commit_responses = new ArrayList<DadkvsMain.CommitReply>();
+		GenericResponseCollector<DadkvsMain.CommitReply> commit_collector = new GenericResponseCollector<DadkvsMain.CommitReply> (commit_responses, n_servers);
+
+		for (int i = 0; i < n_servers; i++) {
+			CollectorStreamObserver<DadkvsMain.CommitReply> commit_observer = new CollectorStreamObserver<DadkvsMain.CommitReply>(commit_collector);
+			async_stubs[i].committx(commit_request.build(), commit_observer);
+		}
+		commit_collector.waitForTarget(responses_needed);
+		if (commit_responses.size() >= responses_needed) {
+			Iterator<DadkvsMain.CommitReply> commit_iterator = commit_responses.iterator();
+			DadkvsMain.CommitReply commit_reply = commit_iterator.next ();
+
+			System.out.println("Reqid = " + reqid + " id in reply = " + commit_reply.getReqid());
+			result = commit_reply.getAck();
+			if (result) {
+				System.out.println("Committed key " + commit_request.getWritekey() + " with value " + commit_request.getWriteval());
+			} else {
+				System.out.println("Commit Failed");
+			}
+		} else {
+			System.out.println("Panic...error commiting");
+		}
+		return result;
     }
-     
+
     private VersionedValue doRead (int key) {
-	sequence_number = sequence_number+1;
-	int reqid = sequence_number*100 + client_id;
-	
-	DadkvsMain.ReadRequest.Builder read_request  = DadkvsMain.ReadRequest.newBuilder();;
-	ArrayList<DadkvsMain.ReadReply> read_responses = new ArrayList<DadkvsMain.ReadReply>();; 
-	GenericResponseCollector<DadkvsMain.ReadReply> read_collector = new GenericResponseCollector<DadkvsMain.ReadReply>(read_responses, n_servers);;
-    
-	read_request.setReqid(reqid).setKey(key);
-	for (int i = 0; i < n_servers; i++) {
-	    CollectorStreamObserver<DadkvsMain.ReadReply> read_observer = new CollectorStreamObserver<DadkvsMain.ReadReply>(read_collector);
-	    async_stubs[i].read(read_request.build(), read_observer);
-	}
-	read_collector.waitForTarget(responses_needed);
-	if (read_responses.size() >= responses_needed) {
-	    Iterator<DadkvsMain.ReadReply> read_iterator = read_responses.iterator();
-	    DadkvsMain.ReadReply read_reply = read_iterator.next();
-	    System.out.println("Reqid = " + reqid + " id in reply = " + read_reply.getReqid());
-	    System.out.println("read key " + read_request.getKey() + " = <" + read_reply.getValue() + "," + read_reply.getTimestamp() + ">");
-	    VersionedValue kv_entry = new VersionedValue (read_reply.getValue(), read_reply.getTimestamp());;
-	    return kv_entry;
-	}
-	else {
-	    System.out.println("error reading");
-	    return null;
-	}
+		sequence_number = sequence_number + 1;
+		int reqid = sequence_number*100 + client_id;
+
+		DadkvsMain.ReadRequest.Builder read_request  = DadkvsMain.ReadRequest.newBuilder();;
+		ArrayList<DadkvsMain.ReadReply> read_responses = new ArrayList<DadkvsMain.ReadReply>();;
+		GenericResponseCollector<DadkvsMain.ReadReply> read_collector = new GenericResponseCollector<DadkvsMain.ReadReply>(read_responses, n_servers);;
+
+		read_request.setReqid(reqid).setKey(key);
+		for (int i = 0; i < n_servers; i++) {
+			CollectorStreamObserver<DadkvsMain.ReadReply> read_observer = new CollectorStreamObserver<DadkvsMain.ReadReply>(read_collector);
+			async_stubs[i].read(read_request.build(), read_observer);
+		}
+		read_collector.waitForTarget(responses_needed);
+		if (read_responses.size() >= responses_needed) {
+			Iterator<DadkvsMain.ReadReply> read_iterator = read_responses.iterator();
+			DadkvsMain.ReadReply read_reply = read_iterator.next();
+
+			System.out.println("Reqid = " + reqid + " id in reply = " + read_reply.getReqid());
+			System.out.println("read key " + read_request.getKey() + " = <" + read_reply.getValue() + "," + read_reply.getTimestamp() + ">");
+			VersionedValue kv_entry = new VersionedValue (read_reply.getValue(), read_reply.getTimestamp());;
+			return kv_entry;
+		} else {
+			System.out.println("error reading");
+			return null;
+		}
     }
 
-    
     private void doTransactions () throws Exception {
-	int counter = 0;
-	int committed = 0;
+		int counter = 0;
+		int committed = 0;
 
-	System.out.println("going to run " + loop_size + " transactions with key range = " + key_range + " sleep delay range = " + sleep_range);
-	
-        while (counter < loop_size) {
-            int write_key = rnd.nextInt(key_range)+1;
-	    int write_value = rnd.nextInt(1000);
-	    
-            // read key 1
-	    int read_key1 = rnd.nextInt(key_range)+1;
-	    VersionedValue kv_entry1 = doRead (read_key1);
-	    if (kv_entry1 == null) {
+		System.out.println("going to run " + loop_size + " transactions with key range = " + key_range + " sleep delay range = " + sleep_range);
+
+		while (counter < loop_size) {
+			int write_key = rnd.nextInt(key_range)+1;
+		int write_value = rnd.nextInt(1000);
+		
+			// read key 1
+		int read_key1 = rnd.nextInt(key_range)+1;
+		VersionedValue kv_entry1 = doRead (read_key1);
+		if (kv_entry1 == null) {
 		System.out.println("Panic! ..");
 		return;
-	    }
-	    Thread.sleep(rnd.nextInt(sleep_range) * 1000);
+		}
+		Thread.sleep(rnd.nextInt(sleep_range) * 1000);
 
-            // read key 2
-	    int read_key2 = rnd.nextInt(key_range)+1;
-	    VersionedValue kv_entry2 = doRead (read_key2);
-	    if (kv_entry2 == null) {
+			// read key 2
+		int read_key2 = rnd.nextInt(key_range)+1;
+		VersionedValue kv_entry2 = doRead (read_key2);
+		if (kv_entry2 == null) {
 		System.out.println("Panic! ..");
 		return;
-	    }
-	    Thread.sleep(rnd.nextInt(sleep_range) * 1000);
+		}
+		Thread.sleep(rnd.nextInt(sleep_range) * 1000);
 
 
-	    System.out.println("Commiting transaction number " + (counter+1));
-	    if (doCommit (read_key1, kv_entry1.getVersion(), read_key2, kv_entry2.getVersion(), write_key, write_value))
+		System.out.println("Commiting transaction number " + (counter+1));
+		if (doCommit (read_key1, kv_entry1.getVersion(), read_key2, kv_entry2.getVersion(), write_key, write_value))
 		committed++;
-            Thread.sleep(rnd.nextInt(sleep_range) * 1000);
-            counter++;
-        }
-	System.out.println("loop done. transactions committed = " + committed + ". transactions aborted = " + (loop_size-committed) + ".");
-	
+			Thread.sleep(rnd.nextInt(sleep_range) * 1000);
+			counter++;
+		}
+		System.out.println("loop done. transactions committed = " + committed + ". transactions aborted = " + (loop_size-committed) + ".");
+		
     }
     
     private void initComms () {
