@@ -5,7 +5,8 @@ syntax = "proto3";
 package dadkvs;
 
 message DefineOrderRequest {
-  repeated int32 seqNumberList = 1 ;
+  int32 nextReqid = 1;
+  int32 seqNumber = 2;
 }
 
 message DefineOrderReply{}
