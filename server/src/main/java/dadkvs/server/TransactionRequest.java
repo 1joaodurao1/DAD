@@ -9,7 +9,7 @@ public class TransactionRequest {
 
 
     public TransactionRequest(int key) {
-        this.read_key = key1;
+        this.read_key = key;
         this.isRead= true;
         this.record = null;
     }
