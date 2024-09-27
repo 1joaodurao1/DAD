@@ -28,14 +28,13 @@ public class GenericResponseCollector<T>  {
 	pending--;
 	notifyAll();
     }
- 
+
     synchronized public void waitForTarget(int target) {
         while ((pending > 0) && (received < target)) {
             try {
-		wait ();
-	    }
-	    catch (InterruptedException e) {
-	    }
+				wait ();
+	    	}
+	    	catch (InterruptedException e) {}
 	}
 	target_reached = true;
     }
