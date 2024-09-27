@@ -199,8 +199,8 @@ public class DadkvsConsoleClient {
 
 								DadkvsMain.CommitRequest.Builder commit_request = DadkvsMain.CommitRequest.newBuilder();
 
-								commit_request.setReqid(reqid).
-									setKey1(0)
+								commit_request.setReqid(reqid)
+									.setKey1(0)
 									.setVersion1(old_config_ts)
 									.setKey2(0)
 									.setVersion2(old_config_ts)
