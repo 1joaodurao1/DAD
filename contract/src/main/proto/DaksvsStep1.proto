@@ -1,0 +1,23 @@
+//
+// Protocol buffers definition for Dadkvs Step 1 Service
+//
+syntax = "proto3";
+package dadkvs;
+
+message DefineOrderRequest {
+  repeated int32 seqNumberList = 1 ;
+}
+
+message DefineOrderReply{}
+
+
+
+service DadkvsStep1Service {
+  rpc defineOrder (DefineOrderRequest) returns (DefineOrderReply);
+}
+
+
+
+
+
+
