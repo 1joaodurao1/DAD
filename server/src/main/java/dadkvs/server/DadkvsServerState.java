@@ -48,7 +48,7 @@ public class DadkvsServerState {
             catch (InterruptedException e) {} // Ignore
         }
         if (nextSeqNumber > seqNumber){
-            System.out.println("ERROR: nextSeqNumber " + nextSeqNumber + "is HIGHER than the seqNumber recieved " + seqNumber);
+            System.out.println("ERROR: nextSeqNumber " + nextSeqNumber + "is HIGHER than the seqNumber received " + seqNumber);
         }
         nextSeqNumber++;
         orderQueue.add(reqid);
