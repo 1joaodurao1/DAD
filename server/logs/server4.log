@@ -1,0 +1,28 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] -----------------------< dad2425:dadkvs-server >------------------------
+[INFO] Building dadkvs-server skeleton
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- exec:3.0.0:java (default-cli) @ dadkvs-server ---
+DadkvsServer
+Received 2 arguments
+arg[0] = 8080
+arg[1] = 0
+targets[0] = localhost:8080
+targets[1] = localhost:8081
+targets[2] = localhost:8082
+targets[3] = localhost:8083
+targets[4] = localhost:8084
+Main loop do work start
+Main loop do work: waiting
+[WARNING] 
+java.io.IOException: Failed to bind to address 0.0.0.0/0.0.0.0:8080
+    at io.grpc.netty.shaded.io.grpc.netty.NettyServer.start (NettyServer.java:328)
+    at io.grpc.internal.ServerImpl.start (ServerImpl.java:179)
+    at io.grpc.internal.ServerImpl.start (ServerImpl.java:90)
+    at dadkvs.server.DadkvsServer.main (DadkvsServer.java:77)
+    at org.codehaus.mojo.exec.ExecJavaMojo$1.run (ExecJavaMojo.java:254)
+    at java.lang.Thread.run (Thread.java:1570)
+Caused by: io.grpc.netty.shaded.io.netty.channel.unix.Errors$NativeIoException: bind(..) failed: Address already in use
