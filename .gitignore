@@ -1,3 +1,2 @@
 contract/pom.xml
-./server/logs/*.log
-./client/logs/*.log
+*.log
