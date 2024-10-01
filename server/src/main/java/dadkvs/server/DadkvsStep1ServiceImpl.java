@@ -10,30 +10,28 @@ import java.util.Random;
 
 public class DadkvsStep1ServiceImpl extends DadkvsStep1ServiceGrpc.DadkvsStep1ServiceImplBase {
 
-    DadkvsServerState server_state;
+	DadkvsServerState server_state;
 
-    public DadkvsStep1ServiceImpl(DadkvsServerState state) {
+	public DadkvsStep1ServiceImpl(DadkvsServerState state) {
 		this.server_state = state;
-    }
+	}
 
-    @Override
-    public void defineOrder(DadkvsStep1.DefineOrderRequest request, StreamObserver<DadkvsStep1.DefineOrderReply> responseObserver) {
+	@Override
+	public void defineOrder(DadkvsStep1.DefineOrderRequest request,
+			StreamObserver<DadkvsStep1.DefineOrderReply> responseObserver) {
 		// for debug purposes
 		System.out.println(request);
 
-        if ( this.server_state.isFreezed ){
-            System.out.println("Server is freezed!");
-            return;
-        }
-        else if (this.server_state.isDelayed){
-            this.server_state.insertDelay();
-        }
+		if (this.server_state.isDelayed) {
+			this.server_state.insertDelay();
+		}
 
-        // Call a function here that either executes in order the transactions it has, or saves the OrderList until it recieves the respective transactions
-        this.server_state.handleOrderID(request.getNextReqid(), request.getSeqNumber());
+		// Call a function here that either executes in order the transactions it has,
+		// or saves the OrderList until it recieves the respective transactions
+		this.server_state.handleOrderID(request.getNextReqid(), request.getSeqNumber());
 		DadkvsStep1.DefineOrderReply response = DadkvsStep1.DefineOrderReply.newBuilder().build();
 
 		responseObserver.onNext(response);
 		responseObserver.onCompleted();
-    }
+	}
 }
