@@ -20,7 +20,13 @@ public class DadkvsMainServiceImpl extends DadkvsMainServiceGrpc.DadkvsMainServi
     public void read(DadkvsMain.ReadRequest request, StreamObserver<DadkvsMain.ReadReply> responseObserver) {
 		// for debug purposes
 		System.out.println("Receiving read request:" + request);
-
+		if ( this.server_state.isFreezed ){
+			System.out.println("Server is freezed!");
+			return;
+		}
+		else if ( this.server_state.isDelayed){
+			this.server_state.insertDelay();
+		}
 		int reqid = request.getReqid();
 		int key = request.getKey();
 		VersionedValue vv = this.server_state.store.read(key);
@@ -36,6 +42,14 @@ public class DadkvsMainServiceImpl extends DadkvsMainServiceGrpc.DadkvsMainServi
     public void committx(DadkvsMain.CommitRequest request, StreamObserver<DadkvsMain.CommitReply> responseObserver) {
 		// for debug purposes
 		System.out.println("Receiving commit request:" + request);
+
+		if ( this.server_state.isFreezed ){
+			System.out.println("Server is freezed!");
+			return;
+		}
+		else if ( this.server_state.isDelayed){
+			this.server_state.insertDelay();
+		}
 
 		int reqid = request.getReqid();
 		int key1 = request.getKey1();

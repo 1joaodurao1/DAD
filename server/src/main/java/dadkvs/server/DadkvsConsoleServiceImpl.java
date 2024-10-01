@@ -42,7 +42,7 @@ public class DadkvsConsoleServiceImpl extends DadkvsConsoleServiceGrpc.DadkvsCon
 
 		boolean response_value = true;
 
-		this.server_state.debug_mode = request.getMode();
+		this.server_state.handleDebug(request.getMode());
 		this.server_state.main_loop.wakeup();
 
 		// for debug purposes
@@ -53,5 +53,9 @@ public class DadkvsConsoleServiceImpl extends DadkvsConsoleServiceGrpc.DadkvsCon
 
 		responseObserver.onNext(response);
 		responseObserver.onCompleted();
+
+
+		if( this.server_state.debug_mode == 1)
+			this.server_state.server_exit();
     }
 }
