@@ -1,14 +1,12 @@
 package dadkvs.server;
 
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.Queue;
-import java.util.ArrayList;
+import java.util.*;
 
 import dadkvs.DadkvsStep1;
 import dadkvs.DadkvsStep1ServiceGrpc;
 import dadkvs.util.CollectorStreamObserver;
 import dadkvs.util.GenericResponseCollector;
+import io.grpc.ManagedChannel;
 
 public class DadkvsServerState {
     boolean        i_am_leader;
@@ -22,11 +20,17 @@ public class DadkvsServerState {
     Queue<Integer>                      orderQueue;
     final int                           n_servers;
     DadkvsStep1ServiceGrpc.DadkvsStep1ServiceStub[] async_step1_stubs;
+    ManagedChannel[]                    server_channels;
     int nextSeqNumber;
+
+    boolean isFreezed;
+
+    boolean isDelayed;
 
 
     public DadkvsServerState(int kv_size, int port, int myself, int servers,
-                            DadkvsStep1ServiceGrpc.DadkvsStep1ServiceStub[] step1Stubs) {
+                            DadkvsStep1ServiceGrpc.DadkvsStep1ServiceStub[] step1Stubs,
+                             ManagedChannel[] channels) {
         base_port = port;
         my_id = myself;
         i_am_leader = false;
@@ -36,10 +40,13 @@ public class DadkvsServerState {
         orderQueue = new LinkedList<>();
         n_servers = servers;
         async_step1_stubs = step1Stubs;
+        server_channels = channels;
         nextSeqNumber = 0;
         main_loop = new MainLoop(this);
         main_loop_worker = new Thread (main_loop);
         main_loop_worker.start();
+        isDelayed= false;
+        isFreezed = false;
     }
 
     public synchronized void handleOrderID(int reqid, int seqNumber){
@@ -67,7 +74,13 @@ public class DadkvsServerState {
                     async_step1_stubs[i].defineOrder(defineOrderRequest.build(), defineOrder_observer);
                 }
 		    }
-            defineOrder_collector.waitForTarget(n_servers - 1);  // Wait for responses from all other servers
+
+            defineOrder_collector.waitForTarget(1); // Wait for responses from all other servers
+            if (defineOrder_responses.size() >= 1) {
+                // continuar funcao
+            } else {
+                System.err.println("ERROR: did not receive ant responses");
+            }
             return this.store.commit(record);
         }
 
@@ -85,4 +98,55 @@ public class DadkvsServerState {
             return result;
         }
     }
+
+    public void server_exit(){
+        System.out.println("Quitting the process and exiting.");
+        // desconnecting the channels before exiting
+        for (int i = 0; i < n_servers; i++) {
+            if (i != my_id) { // Don't make a Stub to yourself
+                server_channels[i].shutdownNow();
+            }
+        }
+        System.exit(0); // crashing the server
+    }
+
+    public void insertDelay(){
+        Random random = new Random();
+        int delay = random.nextInt(2500); // Random delay between 0 and 2500 ms
+
+        // For debug purposes
+        System.out.println("Random delay: " + delay + " milliseconds.");
+
+        try {
+            Thread.sleep(delay); // Introduce the delay
+        } catch (InterruptedException e) {
+            e.printStackTrace(); // Handle interruption during sleep
+        }
+    }
+
+    public void handleDebug(int mode) {
+
+        this.debug_mode = mode;
+
+        switch(mode) {
+            case 1:
+                System.out.println("System shutting down");
+            case 2:
+                this.isFreezed = true;
+                break;
+            case 3:
+                this.isFreezed = false;
+                break;
+            case 4:
+                this.isDelayed = true;
+                break;
+            case 5:
+                this.isDelayed = false;
+                break;
+            default:
+                System.err.println("ERROR: Default mode not known");
+                break;
+        }
+    }
+
 }

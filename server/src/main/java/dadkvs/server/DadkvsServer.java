@@ -62,7 +62,7 @@ public class DadkvsServer {
 			}
 		}
 
-		server_state = new DadkvsServerState(kvsize, base_port, my_id, n_servers, step1_stubs); // Creating this State Machine starts the Main Loop
+		server_state = new DadkvsServerState(kvsize, base_port, my_id, n_servers, step1_stubs, channels); // Creating this State Machine starts the Main Loop
 
 		port = base_port + my_id;
 
