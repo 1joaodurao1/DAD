@@ -12,13 +12,11 @@ public class Pair {
         requestCounter = reqCounter;
     }
 
-    public int getSeqNumber(){return this.sequenceNumber;}
+    public int getNum1(){return this.sequenceNumber;}
 
-    public int getReqCounter(){return this.requestCounter;}
+    public int getNum2(){return this.requestCounter;}
 
-    public void setSeqNumber( int seqNumber){ this.sequenceNumber = seqNumber; }
+    public void setNum1( int seqNumber){ this.sequenceNumber = seqNumber; }
 
-    public void setReqCounter (int reqCounter) { this.requestCounter = reqCounter;}
-
-    
+    public void setNum2 (int reqCounter) { this.requestCounter = reqCounter;}
 }

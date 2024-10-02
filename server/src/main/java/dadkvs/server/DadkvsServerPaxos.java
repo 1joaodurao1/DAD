@@ -6,6 +6,9 @@ import dadkvs.util.CollectorStreamObserver;
 import dadkvs.util.GenericResponseCollector;
 import java.util.ArrayList;
 import java.util.Iterator;
+
+import com.google.common.collect.ArrayListMultimap;
+
 import java.util.Collections;
 
 class DadkvsServerPaxos {
@@ -14,15 +17,18 @@ class DadkvsServerPaxos {
     int my_current_priority;
     DadkvsServerState server_state;
     final int numPaxosServers = 3;
-    int lastReqIdproposed = -1;
+
+    ArrayList<Pair> paxosLogs;
 
     public DadkvsServerPaxos(int config, DadkvsServerState state){
         my_current_priority = state.my_id;
         my_current_config = config;
         server_state = state;
+        paxosLogs = new ArrayList<>();
     }
 
     public int handleLeaderPaxos(int seqNum, int reqid){
+        paxosLogs.add(new Pair(reqid, my_current_priority)); // SAVE LOG
 
         DadkvsPaxos.PhaseOneRequest.Builder phaseOneRequest  = DadkvsPaxos.PhaseOneRequest.newBuilder();
         while (server_state.i_am_leader){
@@ -49,14 +55,16 @@ class DadkvsServerPaxos {
                     return phaseOne_reply.getSeqNum();
                 }
                 // Check accepted value
-                if (phaseOne_reply.getAccepted()){
+                if (phaseOne_reply.getAccepted()){ // Being accpted <=> my priority
                     if (phaseOne_reply.getPhase1Value() != -1){ // "-1" means empty
                         reqid = phaseOne_reply.getPhase1Value();
                     }
+                    paxosLogs.get(seqNum).setNum1(reqid);
                     // HERE YOU GO TO PHASE TWO
                 } else {
                     // HERE you try Phase One again
                     this.my_current_priority += this.server_state.n_servers;
+                    paxosLogs.get(seqNum).setNum2(this.my_current_priority);
                     continue;
                 }
                 // Don't check priority, because we will try again anyway if we are not accepted
@@ -82,7 +90,8 @@ class DadkvsServerPaxos {
                 DadkvsPaxos.PhaseTwoReply phaseTwo_reply = phaseTwo_iterator.next();
                 // Check seqNum
                 if (phaseTwo_reply.getSeqNum() > seqNum){
-                    // Probably not happening
+                    // We should do a wait() here until I receive DUVIDDDDAAAAAAAAA
+                    System.err.println("ERROR: Should not have received a different seqNumber");
                 }
                 if (phaseTwo_reply.getPhase2Accepted()){
                     break; // SUCCESS
@@ -123,6 +132,12 @@ class DadkvsServerPaxos {
     public DadkvsPaxos.PhaseOneReply handlePhaseOneReply(int p1config, int p1seqNum, int p1priority){
         boolean accepted;
         DadkvsPaxos.PhaseOneReply.Builder phaseOne_reply = DadkvsPaxos.PhaseOneReply.newBuilder();
+        if (paxosLogs.size() <= p1seqNum){ // Add log to ArrayList if it doesn't exist
+            paxosLogs.add(new Pair(-1, p1priority));
+        }
+        if (paxosLogs.get(p1seqNum).getNum2() < p1priority){ // Update priority if incoming priority is higher
+            paxosLogs.get(p1seqNum).setNum2(p1priority);
+        }
         if(server_state.nextSeqNumber <= p1seqNum){ // If the incoming seqNum is lower, it means the leader hasn't executed all the transactions already decided by previous consensus
             accepted = true;
         } else {
@@ -131,7 +146,7 @@ class DadkvsServerPaxos {
         phaseOne_reply.setPhase1Config(Math.max(my_current_config, p1config))
                     .setSeqNum(Math.max(server_state.nextSeqNumber, p1seqNum))
                     .setAccepted(accepted)
-                    .setPhase1Value(lastReqIdproposed)
+                    .setPhase1Value(paxosLogs.get(p1seqNum).getNum1())
                     .setPriority(-1); // Priority is ignored, so idk about this value
         return phaseOne_reply.build();
     }
@@ -139,14 +154,14 @@ class DadkvsServerPaxos {
     public DadkvsPaxos.PhaseTwoReply handlePhaseTwoReply(int p2config, int p2seqNum, int p2value, int p2priority){
         boolean accepted;
         DadkvsPaxos.PhaseTwoReply.Builder phaseTwo_reply  = DadkvsPaxos.PhaseTwoReply.newBuilder();
-        if(server_state.nextSeqNumber <= p2seqNum){ // If the incoming seqNum is lower, it means the leader hasn't executed all the transactions already decided by previous consensus
+        if(paxosLogs.get(p2seqNum).getNum2() <= p2priority){ // If the incoming p2seqNum is lower, it means the leader hasn't executed all the transactions already decided by previous consensus
             accepted = true;
-            lastReqIdproposed = p2value; // Value to be sent in PhaseOneReply
+            paxosLogs.get(p2seqNum).setNum1(p2value); // Value to be sent in PhaseOneReply
         } else {
             accepted = false;
         }
         phaseTwo_reply.setPhase2Config(Math.max(my_current_config, p2config))
-                    .setSeqNum(Math.max(server_state.nextSeqNumber, p2seqNum))
+                    .setSeqNum(p2seqNum)
                     .setPhase2Accepted(accepted);
         return phaseTwo_reply.build();
     }
