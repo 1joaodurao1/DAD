@@ -51,6 +51,7 @@ public class DadkvsServerState {
         localOrder = new AtomicInteger(0);
         learnCounter = new HashMap<>();
         localOrderList = new ArrayList<Integer>();
+        minLocalorder = 0;
         paxos = new DadkvsServerPaxos(0,this);
         main_loop = new MainLoop(this);
         main_loop_worker = new Thread (main_loop);
@@ -83,7 +84,11 @@ public class DadkvsServerState {
         synchronized(this){
 
             while (isFreezed || !learnCounter.containsKey(reqid) || !(learnCounter.get(reqid).getNum1() == nextSeqNumber && learnCounter.get(reqid).getNum2() >= 2)){ 
-
+                System.out.println("[handleTRansaction] i_am_leader = " +  this.i_am_leader);
+                System.out.println("[handleTRansaction] this.minLocalorder = " +  this.minLocalorder);
+                System.out.println("[handleTRansaction] localOrder_copy = " +  localOrder_copy);
+                System.out.println("[handleTRansaction] nextSeqNumToDecide = " +  nextSeqNumToDecide);
+                System.out.println("[handleTRansaction] nextSeqNumber = " +  nextSeqNumber);
                 if ( this.i_am_leader && this.minLocalorder == localOrder_copy && nextSeqNumToDecide == nextSeqNumber){
                     System.out.println("[handleTRansaction] Im leader and starting paxos with local order number " + localOrder_copy);
                     // chamar paxos
@@ -93,13 +98,17 @@ public class DadkvsServerState {
                     try { wait ();}
                     catch (InterruptedException e) {} // Ignore
                 }
-
             }
-            System.err.println("[handleTransaction] Im a learner and im going to commit with seqNumber " + learnCounter.get(reqid).getNum1()+
+
+            System.out.println("[handleTransaction] Im a learner and im going to commit with seqNumber " + learnCounter.get(reqid).getNum1()+
             "and request id " + reqid);
             if(localOrderList.contains(localOrder_copy)){
                 this.localOrderList.remove(localOrder_copy); // in case leader is behind
-                this.minLocalorder = Collections.min(localOrderList);
+                if(localOrderList.size() > 0){
+                    this.minLocalorder = Collections.min(localOrderList);
+                } else {
+                    this.minLocalorder = 0;
+                }
             }
             boolean result = this.store.commit(record);
             learnCounter.remove(reqid);
@@ -146,7 +155,9 @@ public class DadkvsServerState {
                 break;
             case 3:
                 this.isFreezed = false;
-                notifyAll();
+                synchronized(this){
+                    notifyAll();
+                }
                 break;
             case 4:
                 this.isDelayed = true;
@@ -161,8 +172,14 @@ public class DadkvsServerState {
     }
 
     public void removeAndUpdateLocalOrder (){
-        this.localOrderList.remove(this.minLocalorder);
-        this.minLocalorder = Collections.min(this.localOrderList);
+        if(localOrderList.contains(this.minLocalorder)){
+            this.localOrderList.remove(this.minLocalorder);
+        }
+        if(localOrderList.size() > 0){
+            this.minLocalorder = Collections.min(localOrderList);
+        } else {
+            this.minLocalorder = 0;
+        }
     }
 
 }

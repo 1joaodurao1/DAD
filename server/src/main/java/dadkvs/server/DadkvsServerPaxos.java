@@ -104,9 +104,11 @@ class DadkvsServerPaxos {
             }
         }
 
-        // Remove value from localOrderList, because it has already been decided by Paxos (so you don't try to propose it again)
-        server_state.removeAndUpdateLocalOrder();
-        notifyAll(); // Allows the next Paxos to start for the new minLocalOrder
+        synchronized(this){
+            // Remove value from localOrderList, because it has already been decided by Paxos (so you don't try to propose it again)
+            server_state.removeAndUpdateLocalOrder();
+            notifyAll(); // Allows the next Paxos to start for the new minLocalOrder
+        }
 
         // SEND LEARN REQUEST
         DadkvsPaxos.LearnRequest.Builder learnRequest  = DadkvsPaxos.LearnRequest.newBuilder();
