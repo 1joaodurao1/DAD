@@ -29,7 +29,7 @@ class DadkvsServerPaxos {
             // SEND PHASE ONE REQUEST (Prepare)
             ArrayList<DadkvsPaxos.PhaseOneReply> phaseOne_responses = new ArrayList<>();
             GenericResponseCollector<DadkvsPaxos.PhaseOneReply> phaseOne_collector = new GenericResponseCollector<>(phaseOne_responses, numPaxosServers);
-            phaseOneRequest.setPhase1config(my_current_config).setSeqNum(seqNum).setPriority(my_current_priority);
+            phaseOneRequest.setPhase1Config(my_current_config).setSeqNum(seqNum).setPriority(my_current_priority);
             for (int i = my_current_config; i < numPaxosServers + my_current_config; i++) {
                 if (i != server_state.my_id){
                     CollectorStreamObserver<DadkvsPaxos.PhaseOneReply> phaseOne_observer = new CollectorStreamObserver<DadkvsPaxos.PhaseOneReply>(phaseOne_collector);
@@ -69,7 +69,7 @@ class DadkvsServerPaxos {
             DadkvsPaxos.PhaseTwoRequest.Builder phaseTwoRequest  = DadkvsPaxos.PhaseTwoRequest.newBuilder();
             ArrayList<DadkvsPaxos.PhaseTwoReply> phaseTwo_responses = new ArrayList<>();
             GenericResponseCollector<DadkvsPaxos.PhaseTwoReply> phaseTwo_collector = new GenericResponseCollector<>(phaseTwo_responses, numPaxosServers);
-            phaseTwoRequest.setPhase2config(my_current_config).setSeqNum(seqNum).setPhase2value(reqid).setPriority(my_current_priority);
+            phaseTwoRequest.setPhase2Config(my_current_config).setSeqNum(seqNum).setPhase2Value(reqid).setPriority(my_current_priority);
             for (int i = my_current_config; i < numPaxosServers + my_current_config; i++) {
                 if (i != server_state.my_id){
                     CollectorStreamObserver<DadkvsPaxos.PhaseTwoReply> phaseTwo_observer = new CollectorStreamObserver<DadkvsPaxos.PhaseTwoReply>(phaseTwo_collector);
@@ -84,7 +84,7 @@ class DadkvsServerPaxos {
                 if (phaseTwo_reply.getSeqNum() > seqNum){
                     // Probably not happening
                 }
-                if (phaseTwo_reply.getPhase2accepted()){
+                if (phaseTwo_reply.getPhase2Accepted()){
                     break; // SUCCESS
                 } else {
                     // HERE you try Phase One again
@@ -122,7 +122,7 @@ class DadkvsServerPaxos {
 
     public DadkvsPaxos.PhaseOneReply handlePhaseOneReply(int p1config, int p1seqNum, int p1priority){
         boolean accepted;
-        DadkvsPaxos.PhaseOneReply phaseOne_reply;
+        DadkvsPaxos.PhaseOneReply.Builder phaseOne_reply = DadkvsPaxos.PhaseOneReply.newBuilder();
         if(server_state.nextSeqNumber <= p1seqNum){ // If the incoming seqNum is lower, it means the leader hasn't executed all the transactions already decided by previous consensus
             accepted = true;
         } else {
@@ -131,14 +131,14 @@ class DadkvsServerPaxos {
         phaseOne_reply.setPhase1Config(Math.max(my_current_config, p1config))
                     .setSeqNum(Math.max(server_state.nextSeqNumber, p1seqNum))
                     .setAccepted(accepted)
-                    .setPhase1value(lastReqIdproposed)
+                    .setPhase1Value(lastReqIdproposed)
                     .setPriority(-1); // Priority is ignored, so idk about this value
-        return phaseOne_reply;
+        return phaseOne_reply.build();
     }
 
     public DadkvsPaxos.PhaseTwoReply handlePhaseTwoReply(int p2config, int p2seqNum, int p2value, int p2priority){
         boolean accepted;
-        DadkvsPaxos.PhaseTwoReply phaseTwo_reply;
+        DadkvsPaxos.PhaseTwoReply.Builder phaseTwo_reply  = DadkvsPaxos.PhaseTwoReply.newBuilder();
         if(server_state.nextSeqNumber <= p2seqNum){ // If the incoming seqNum is lower, it means the leader hasn't executed all the transactions already decided by previous consensus
             accepted = true;
             lastReqIdproposed = p2value; // Value to be sent in PhaseOneReply
@@ -147,17 +147,17 @@ class DadkvsServerPaxos {
         }
         phaseTwo_reply.setPhase2Config(Math.max(my_current_config, p2config))
                     .setSeqNum(Math.max(server_state.nextSeqNumber, p2seqNum))
-                    .setAccepted(accepted);
-        return phaseTwo_reply;
+                    .setPhase2Accepted(accepted);
+        return phaseTwo_reply.build();
     }
 
     public DadkvsPaxos.LearnReply handleLearnReply(int lconfig, int lseqNum, int lvalue, int lpriority){
         boolean accepted = true;
-        DadkvsPaxos.LearnReply learn_reply;
-        learn_reply.setPhase2Config(Math.max(my_current_config, lconfig))
+        DadkvsPaxos.LearnReply.Builder learn_reply = DadkvsPaxos.LearnReply.newBuilder();
+        learn_reply.setLearnconfig(Math.max(my_current_config, lconfig))
                     .setSeqNum(server_state.nextSeqNumber) // send your own nextSeqNumber (because: Why not?)
-                    .setAccepted(accepted);
-        return learn_reply;
+                    .setLearnaccepted(accepted);
+        return learn_reply.build();
     }
 
 }
