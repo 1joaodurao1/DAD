@@ -1,7 +1,6 @@
 
 package dadkvs.server;
 
-
 import java.util.ArrayList;
 import java.util.Iterator;
 
@@ -27,13 +26,13 @@ public class DadkvsPaxosServiceImpl extends DadkvsPaxosServiceGrpc.DadkvsPaxosSe
 
 
     @Override
-    public void phaseone(DadkvsPaxos.PhaseOneRequest request, StreamObserver<DadkvsPaxos.PhaseOneReply> responseObserver) {
+    public void phaseOne(DadkvsPaxos.PhaseOneRequest request, StreamObserver<DadkvsPaxos.PhaseOneReply> responseObserver) {
         // for debug purposes
         System.out.println("Receive phase1 request: " + request);
     }
 
     @Override
-    public void phasetwo(DadkvsPaxos.PhaseTwoRequest request, StreamObserver<DadkvsPaxos.PhaseTwoReply> responseObserver) {
+    public void phaseTwo(DadkvsPaxos.PhaseTwoRequest request, StreamObserver<DadkvsPaxos.PhaseTwoReply> responseObserver) {
         // for debug purposes
         System.out.println ("Receive phase two request: " + request);
     }

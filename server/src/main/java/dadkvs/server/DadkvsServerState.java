@@ -1,11 +1,13 @@
 package dadkvs.server;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Random;
+import java.util.concurrent.atomic.AtomicInteger;
 
-import dadkvs.DadkvsStep1;
-import dadkvs.DadkvsStep1ServiceGrpc;
-import dadkvs.util.CollectorStreamObserver;
-import dadkvs.util.GenericResponseCollector;
+import dadkvs.DadkvsPaxosServiceGrpc;
 import io.grpc.ManagedChannel;
 
 public class DadkvsServerState {
@@ -17,21 +19,22 @@ public class DadkvsServerState {
     KeyValueStore  store;
     MainLoop       main_loop;
     Thread         main_loop_worker;
-    Queue<Integer>                      orderQueue;
     final int                           n_servers;
-    DadkvsStep1ServiceGrpc.DadkvsStep1ServiceStub[] async_step1_stubs;
+    DadkvsPaxosServiceGrpc.DadkvsPaxosServiceStub[] async_stubs;
     int nextSeqNumber;
-
     ManagedChannel[]    server_channels;
-
     boolean isFreezed;
-
-    boolean isDelayed;
+    boolean isDelayed; 
+    AtomicInteger localOrder;
+    HashMap<Integer, Pair> learnCounter;
+    ArrayList<Integer> localOrderList;
+    int minLocalorder;
+    DadkvsServerPaxos paxos;
 
 
 
     public DadkvsServerState(int kv_size, int port, int myself, int servers,
-                            DadkvsStep1ServiceGrpc.DadkvsStep1ServiceStub[] step1Stubs,
+                            DadkvsPaxosServiceGrpc.DadkvsPaxosServiceStub[] paxoStubs,
                              ManagedChannel[] channels) {
         base_port = port;
         my_id = myself;
@@ -39,58 +42,69 @@ public class DadkvsServerState {
         debug_mode = 0;
         store_size = kv_size;
         store = new KeyValueStore(kv_size);
-        orderQueue = new LinkedList<>();
         n_servers = servers;
-        async_step1_stubs = step1Stubs;
+        async_stubs = paxoStubs;
         nextSeqNumber = 0;
-        main_loop = new MainLoop(this);
-        main_loop_worker = new Thread (main_loop);
-        main_loop_worker.start();
         isDelayed = false;
         isFreezed = false;
         server_channels = channels;
+        localOrder.set(0);
+        learnCounter = new HashMap<>();
+        localOrderList = new ArrayList<Integer>();
+        paxos = new DadkvsServerPaxos(0,this);
+        main_loop = new MainLoop(this);
+        main_loop_worker = new Thread (main_loop);
+        main_loop_worker.start();
+
     }
 
     public synchronized void handleOrderID(int reqid, int seqNumber){
-        while (nextSeqNumber != seqNumber){ // Force reqids to be added in order of seqNumber
-            try { wait ();}
-            catch (InterruptedException e) {} // Ignore
-        }
         if (nextSeqNumber > seqNumber){
-            System.out.println("ERROR: nextSeqNumber " + nextSeqNumber + "is HIGHER than the seqNumber received " + seqNumber);
+            // This request has already been processed
+            System.out.println("[handleOrderID] Ignore: nextSeqNumber " + nextSeqNumber + "is HIGHER than the seqNumber received " + seqNumber);
+        } else {
+            if (learnCounter.containsKey(reqid)){
+                // Incremente counter in Pair<SeqNum, int>
+                learnCounter.get(reqid).setReqCounter(learnCounter.get(reqid).getReqCounter() + 1);
+                System.out.println("[handleOrderID] Incremented HashMap entry of reqid " + reqid + "to the number" + learnCounter.get(reqid).getReqCounter());
+            } else {
+                learnCounter.put(reqid, new Pair(seqNumber, 0));
+                System.out.println("[handleOrderID] Created HashMap entry of reqid " + reqid + "with the number 1");
+            }
+            notifyAll(); // To release the wait()s in handleTransaction to check if t
         }
-        nextSeqNumber++;
-        orderQueue.add(reqid);
-        notifyAll(); // To release the wait()s in handleOrderID and handleTransaction
     }
 
     public boolean handleTransaction(int reqid, TransactionRecord record){
-        if (i_am_leader){
-            DadkvsStep1.DefineOrderRequest.Builder defineOrderRequest  = DadkvsStep1.DefineOrderRequest.newBuilder();
-            ArrayList<DadkvsStep1.DefineOrderReply> defineOrder_responses = new ArrayList<DadkvsStep1.DefineOrderReply>();
-		    GenericResponseCollector<DadkvsStep1.DefineOrderReply> defineOrder_collector = new GenericResponseCollector<DadkvsStep1.DefineOrderReply>(defineOrder_responses, n_servers);
-            defineOrderRequest.setNextReqid(reqid).setSeqNumber(nextSeqNumber++);
-            for (int i = 0; i < n_servers; i++) {
-                if (i != my_id){
-                    CollectorStreamObserver<DadkvsStep1.DefineOrderReply> defineOrder_observer = new CollectorStreamObserver<DadkvsStep1.DefineOrderReply>(defineOrder_collector);
-                    async_step1_stubs[i].defineOrder(defineOrderRequest.build(), defineOrder_observer);
-                }
-		    }
-            defineOrder_collector.waitForTarget(n_servers - 1);  // Wait for responses from all other servers
-            return this.store.commit(record);
-        }
+
+        int localOrder_copy = this.localOrder.getAndIncrement();
+        int nextSeqNumToDecide = nextSeqNumber;
 
         synchronized(this){
-            boolean result;
-            while (orderQueue.peek() == null || reqid != orderQueue.peek()){ // Wait until you are at the front of the Queue
-                try { wait ();}
-                catch (InterruptedException e) {} // Ignore
+
+            while (!learnCounter.containsKey(reqid) || learnCounter.get(reqid).getReqCounter() < 2){ 
+
+                if ( this.i_am_leader && this.minLocalorder == localOrder_copy && nextSeqNumToDecide == nextSeqNumber){
+                    System.out.println("[handleTRansaction] Im leader and starting paxos with local order number " + localOrder_copy);
+                    // chamar paxos
+                    nextSeqNumToDecide = this.paxos.handleLeaderPaxos(nextSeqNumber, reqid);
+                }
+                else {
+                    try { wait ();}
+                    catch (InterruptedException e) {} // Ignore
+                }
+
             }
-            result = this.store.commit(record);
-            if(orderQueue.poll() == null) { // Removes item on top
-                System.out.println("ERROR: transaction " + reqid + "executed OUT OF ORDER (queue was empty when it executed)");
+            System.err.println("[handleTransaction] Im a learner and im going to commit with seqNumber " + learnCounter.get(reqid).getSeqNumber()+
+            "and request id " + reqid);
+            if(localOrderList.contains(localOrder_copy)){
+                this.localOrderList.remove(localOrder_copy); // in case leader is behind
+                this.minLocalorder = Collections.min(localOrderList);
             }
-            notifyAll(); // After removing top reqid from Queue, execute next transaction immediatly if it's currently waiting
+            boolean result = this.store.commit(record);
+            learnCounter.remove(reqid);
+            nextSeqNumber++;
+            notifyAll();
             return result;
         }
     }
@@ -143,6 +157,11 @@ public class DadkvsServerState {
                 System.err.println("ERROR: Default mode not known");
                 break;
         }
+    }
+
+    public void removeAndUpdateLocalOrder (){
+        this.localOrderList.remove(this.minLocalorder);
+        this.minLocalorder = Collections.min(this.localOrderList);
     }
 
 }

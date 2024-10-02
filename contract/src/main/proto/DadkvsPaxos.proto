@@ -5,29 +5,29 @@ syntax = "proto3";
 package dadkvs;
 
 message PhaseOneRequest { // 1. Prepare
-  int32 phase1config    = 1;
-  int32 phase1index     = 2;
-  int32 phase1timestamp = 3;
+  int32 phase1config  = 1;
+  int32 seqNum        = 2;
+  int32 priority      = 3;
 }
 
 message PhaseOneReply { // 2. Promise
-  int32 phase1config    = 1;
-  int32 phase1index     = 2;
-  bool  phase1accepted  = 3;
-  int32 phase1value     = 4;
-  int32 phase1timestamp = 5;
+  int32 phase1config  = 1;
+  int32 seqNum        = 2;
+  bool  accepted      = 3;
+  int32 phase1value   = 4; // Value left by previous leader in the same consensus
+  int32 priority      = 5;
 }
 
 message PhaseTwoRequest { // 3. Accept
-  int32 phase2config    = 1;
-  int32 phase2index     = 2;
-  int32 phase2value     = 3;
-  int32 phase2timestamp = 4;
+  int32 phase2config  = 1;
+  int32 seqNum        = 2;
+  int32 phase2value   = 3;
+  int32 priority      = 4;
 }
 
 message PhaseTwoReply { // 4. Accepted
   int32 phase2config   = 1;
-  int32 phase2index    = 2;
+  int32 seqNum         = 2;
   bool  phase2accepted = 3;
 }
 
@@ -45,8 +45,8 @@ message LearnReply {  // Learners confirm recieving Accepted messages
 }
 
 service DadkvsPaxosService {
-  rpc phaseone (PhaseOneRequest) returns (PhaseOneReply);
-  rpc phasetwo (PhaseTwoRequest) returns (PhaseTwoReply);
+  rpc phaseOne (PhaseOneRequest) returns (PhaseOneReply);
+  rpc phaseTwo (PhaseTwoRequest) returns (PhaseTwoReply);
   rpc learn (LearnRequest) returns (LearnReply);
 }
 

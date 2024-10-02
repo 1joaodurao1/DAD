@@ -1,15 +1,11 @@
 package dadkvs.server;
 
+import dadkvs.DadkvsPaxosServiceGrpc;
 import io.grpc.BindableService;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
-
-import dadkvs.DadkvsMain;
-import dadkvs.DadkvsMainServiceGrpc;
-
-import dadkvs.DadkvsStep1ServiceGrpc;
 
 public class DadkvsServer {
 
@@ -55,24 +51,23 @@ public class DadkvsServer {
 				channels[i] = ManagedChannelBuilder.forTarget(targets[i]).usePlaintext().build();
 			}
 		}
-		DadkvsStep1ServiceGrpc.DadkvsStep1ServiceStub[] step1_stubs = new DadkvsStep1ServiceGrpc.DadkvsStep1ServiceStub[n_servers];
+		DadkvsPaxosServiceGrpc.DadkvsPaxosServiceStub[] paxos_stubs = new DadkvsPaxosServiceGrpc.DadkvsPaxosServiceStub[n_servers];
 		for (int i = 0; i < n_servers; i++) {
 			if (i != my_id){ // Don't make a Stub to yourself
-				step1_stubs[i] = DadkvsStep1ServiceGrpc.newStub(channels[i]);
+				paxos_stubs[i] = DadkvsPaxosServiceGrpc.newStub(channels[i]);
 			}
 		}
 
-		server_state = new DadkvsServerState(kvsize, base_port, my_id, n_servers, step1_stubs, channels); // Creating this State Machine starts the Main Loop
+		server_state = new DadkvsServerState(kvsize, base_port, my_id, n_servers, paxos_stubs, channels); // Creating this State Machine starts the Main Loop
 
 		port = base_port + my_id;
 
 		final BindableService service_impl = new DadkvsMainServiceImpl(server_state);
 		final BindableService console_impl = new DadkvsConsoleServiceImpl(server_state);
 		final BindableService paxos_impl   = new DadkvsPaxosServiceImpl(server_state);
-		final BindableService step1_impl   = new DadkvsStep1ServiceImpl(server_state);
 
 		// Create a new server to listen on port.
-		Server server = ServerBuilder.forPort(port).addService(service_impl).addService(console_impl).addService(paxos_impl).addService(step1_impl).build();
+		Server server = ServerBuilder.forPort(port).addService(service_impl).addService(console_impl).addService(paxos_impl).build();
 		// Start the server.
 		server.start();
 		// Server threads are running in the background.
