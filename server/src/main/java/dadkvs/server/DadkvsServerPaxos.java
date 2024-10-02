@@ -35,7 +35,13 @@ class DadkvsServerPaxos {
             // SEND PHASE ONE REQUEST (Prepare)
             ArrayList<DadkvsPaxos.PhaseOneReply> phaseOne_responses = new ArrayList<>();
             GenericResponseCollector<DadkvsPaxos.PhaseOneReply> phaseOne_collector = new GenericResponseCollector<>(phaseOne_responses, numPaxosServers);
+
             phaseOneRequest.setPhase1Config(my_current_config).setSeqNum(seqNum).setPriority(my_current_priority);
+            // Debug messages
+            System.out.println("\n[handleLeaderPaxos] Request1.phase1Config = " + phaseOneRequest.getPhase1Config());
+            System.out.println("[handleLeaderPaxos] Request1.seqNum = " + phaseOneRequest.getSeqNum());
+            System.out.println("[handleLeaderPaxos] Request1.priority = " + phaseOneRequest.getPriority());
+
             for (int i = my_current_config; i < numPaxosServers + my_current_config; i++) {
                 if (i != server_state.my_id){
                     CollectorStreamObserver<DadkvsPaxos.PhaseOneReply> phaseOne_observer = new CollectorStreamObserver<DadkvsPaxos.PhaseOneReply>(phaseOne_collector);
@@ -77,7 +83,14 @@ class DadkvsServerPaxos {
             DadkvsPaxos.PhaseTwoRequest.Builder phaseTwoRequest  = DadkvsPaxos.PhaseTwoRequest.newBuilder();
             ArrayList<DadkvsPaxos.PhaseTwoReply> phaseTwo_responses = new ArrayList<>();
             GenericResponseCollector<DadkvsPaxos.PhaseTwoReply> phaseTwo_collector = new GenericResponseCollector<>(phaseTwo_responses, numPaxosServers);
+
             phaseTwoRequest.setPhase2Config(my_current_config).setSeqNum(seqNum).setPhase2Value(reqid).setPriority(my_current_priority);
+            // Debug messages
+            System.out.println("\n[handleLeaderPaxos] Request2.phase1Config = " + phaseTwoRequest.getPhase2Config());
+            System.out.println("[handleLeaderPaxos] Request2.seqNum = " + phaseTwoRequest.getSeqNum());
+            System.out.println("[handleLeaderPaxos] Request2.phase2Value = " + phaseTwoRequest.getPhase2Value());
+            System.out.println("[handleLeaderPaxos] Request2.priority = " + phaseTwoRequest.getPriority());
+
             for (int i = my_current_config; i < numPaxosServers + my_current_config; i++) {
                 if (i != server_state.my_id){
                     CollectorStreamObserver<DadkvsPaxos.PhaseTwoReply> phaseTwo_observer = new CollectorStreamObserver<DadkvsPaxos.PhaseTwoReply>(phaseTwo_collector);
@@ -89,9 +102,8 @@ class DadkvsServerPaxos {
                 Iterator<DadkvsPaxos.PhaseTwoReply> phaseTwo_iterator = phaseTwo_responses.iterator();
                 DadkvsPaxos.PhaseTwoReply phaseTwo_reply = phaseTwo_iterator.next();
                 // Check seqNum
-                if (phaseTwo_reply.getSeqNum() > seqNum){
-                    // We should do a wait() here until I receive DUVIDDDDAAAAAAAAA
-                    System.err.println("ERROR: Should not have received a different seqNumber");
+                if (phaseTwo_reply.getSeqNum() != seqNum){
+                    System.err.println("[handleLeaderPaxos] Reply2 - ERROR: Should not have received a different seqNumber!");
                 }
                 if (phaseTwo_reply.getPhase2Accepted()){
                     break; // SUCCESS
@@ -150,6 +162,12 @@ class DadkvsServerPaxos {
                     .setAccepted(accepted)
                     .setPhase1Value(paxosLogs.get(p1seqNum).getNum1())
                     .setPriority(-1); // Priority is ignored, so idk about this value
+        // Debug messages
+        System.out.println("\n[handlePhaseOneReply] Reply.phase1Config = " + phaseOne_reply.getPhase1Config());
+        System.out.println("[handlePhaseOneReply] Reply.seqNum = " + phaseOne_reply.getSeqNum());
+        System.out.println("[handlePhaseOneReply] Reply.accepted = " + phaseOne_reply.getAccepted());
+        System.out.println("[handlePhaseOneReply] Reply.phase1Value = " + phaseOne_reply.getPhase1Value());
+        System.out.println("[handlePhaseOneReply] Reply.priority = " + phaseOne_reply.getPriority());
         return phaseOne_reply.build();
     }
 
@@ -165,6 +183,10 @@ class DadkvsServerPaxos {
         phaseTwo_reply.setPhase2Config(Math.max(my_current_config, p2config))
                     .setSeqNum(p2seqNum)
                     .setPhase2Accepted(accepted);
+        // Debug messages
+        System.out.println("\n[handlePhaseTwoReply] Reply.phase2Config = " + phaseTwo_reply.getPhase2Config());
+        System.out.println("[handlePhaseTwoReply] Reply.seqNum = " + phaseTwo_reply.getSeqNum());
+        System.out.println("[handlePhaseTwoReply] Reply.phase2Accepted = " + phaseTwo_reply.getPhase2Accepted());
         return phaseTwo_reply.build();
     }
 
