@@ -34,6 +34,10 @@ public class DadkvsPaxosServiceImpl extends DadkvsPaxosServiceGrpc.DadkvsPaxosSe
             try { wait ();}
             catch (InterruptedException e) {} // Ignore
         }
+        if (this.server_state.isDelayed){
+			this.server_state.insertDelay();
+		}
+
         DadkvsPaxos.PhaseOneReply response = server_state.paxos.handlePhaseOneReply(request.getPhase1Config(),
                                                                                     request.getSeqNum(),
                                                                                     request.getPriority());
@@ -50,6 +54,10 @@ public class DadkvsPaxosServiceImpl extends DadkvsPaxosServiceGrpc.DadkvsPaxosSe
             try { wait ();}
             catch (InterruptedException e) {} // Ignore
         }
+        if (this.server_state.isDelayed){
+			this.server_state.insertDelay();
+		}
+
         DadkvsPaxos.PhaseTwoReply response = server_state.paxos.handlePhaseTwoReply(request.getPhase2Config(),
                                                                                     request.getSeqNum(),
                                                                                     request.getPhase2Value(),
@@ -67,7 +75,11 @@ public class DadkvsPaxosServiceImpl extends DadkvsPaxosServiceGrpc.DadkvsPaxosSe
             try { wait ();}
             catch (InterruptedException e) {} // Ignore
         }
-        // Save reqId and seqNum of this LearnRequest
+        if (this.server_state.isDelayed){
+			this.server_state.insertDelay();
+		}
+
+        // Save reqId and seqNum of this LearnRequest in the LearnConter HashMap
         this.server_state.handleOrderID(request.getLearnvalue(), request.getSeqNum());
 
         DadkvsPaxos.LearnReply response = server_state.paxos.handleLearnReply(request.getLearnconfig(),

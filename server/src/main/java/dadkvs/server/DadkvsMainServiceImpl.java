@@ -19,11 +19,12 @@ public class DadkvsMainServiceImpl extends DadkvsMainServiceGrpc.DadkvsMainServi
     public void read(DadkvsMain.ReadRequest request, StreamObserver<DadkvsMain.ReadReply> responseObserver) {
 		// for debug purposes
 		System.out.println("Receiving read request:" + request);
-		if ( this.server_state.isFreezed ){
-			System.out.println("Server is freezed!");
-			return;
-		}
-		else if ( this.server_state.isDelayed){
+		while (server_state.isFreezed){
+            System.out.println("I am freezed ");
+            try { wait ();}
+            catch (InterruptedException e) {} // Ignore
+        }
+		if (this.server_state.isDelayed){
 			this.server_state.insertDelay();
 		}
 		int reqid = request.getReqid();
@@ -42,11 +43,12 @@ public class DadkvsMainServiceImpl extends DadkvsMainServiceGrpc.DadkvsMainServi
 		// for debug purposes
 		System.out.println("Receiving commit request:" + request);
 
-		if ( this.server_state.isFreezed ){
-			System.out.println("Server is freezed!");
-			return;
-		}
-		else if ( this.server_state.isDelayed){
+		while (server_state.isFreezed){
+            System.out.println("I am freezed ");
+            try { wait ();}
+            catch (InterruptedException e) {} // Ignore
+        }
+		if (this.server_state.isDelayed){
 			this.server_state.insertDelay();
 		}
 
