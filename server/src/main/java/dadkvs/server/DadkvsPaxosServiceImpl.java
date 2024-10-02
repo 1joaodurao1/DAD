@@ -67,6 +67,9 @@ public class DadkvsPaxosServiceImpl extends DadkvsPaxosServiceGrpc.DadkvsPaxosSe
             try { wait ();}
             catch (InterruptedException e) {} // Ignore
         }
+        // Save reqId and seqNum of this LearnRequest
+        this.server_state.handleOrderID(request.getLearnvalue(), request.getSeqNum());
+
         DadkvsPaxos.LearnReply response = server_state.paxos.handleLearnReply(request.getLearnconfig(),
                                                                                     request.getSeqNum(),
                                                                                     request.getLearnvalue(),

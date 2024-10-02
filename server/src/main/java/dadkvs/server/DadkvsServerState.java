@@ -84,6 +84,7 @@ public class DadkvsServerState {
         synchronized(this){
 
             while (isFreezed || !learnCounter.containsKey(reqid) || !(learnCounter.get(reqid).getNum1() == nextSeqNumber && learnCounter.get(reqid).getNum2() >= 2)){ 
+                // Debug Messages
                 System.out.println("[handleTRansaction] i_am_leader = " +  this.i_am_leader);
                 System.out.println("[handleTRansaction] this.minLocalorder = " +  this.minLocalorder);
                 System.out.println("[handleTRansaction] localOrder_copy = " +  localOrder_copy);
