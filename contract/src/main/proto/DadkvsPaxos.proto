@@ -33,14 +33,14 @@ message PhaseTwoReply { // 4. Accepted
 
 message LearnRequest { // Inform Learners of Accepted transaction
   int32 learnconfig    = 1;
-  int32 learnindex     = 2;
+  int32 seqNum     = 2;
   int32 learnvalue     = 3;
-  int32 learntimestamp = 4;
+  int32 priority = 4;
 }
 
 message LearnReply {  // Learners confirm recieving Accepted messages
   int32 learnconfig   = 1;
-  int32 learnindex    = 2;
+  int32 seqNum    = 2;
   bool  learnaccepted = 3;
 }
 

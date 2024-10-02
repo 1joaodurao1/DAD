@@ -14,6 +14,7 @@ class DadkvsServerPaxos {
     int my_current_priority;
     DadkvsServerState server_state;
     final int numPaxosServers = 3;
+    int lastReqIdproposed = -1;
 
     public DadkvsServerPaxos(int config, DadkvsServerState state){
         my_current_priority = state.my_id;
@@ -22,7 +23,7 @@ class DadkvsServerPaxos {
     }
 
     public int handleLeaderPaxos(int seqNum, int reqid){
-  
+
         DadkvsPaxos.PhaseOneRequest.Builder phaseOneRequest  = DadkvsPaxos.PhaseOneRequest.newBuilder();
         while (server_state.i_am_leader){
             // SEND PHASE ONE REQUEST (Prepare)
@@ -35,7 +36,7 @@ class DadkvsServerPaxos {
                     server_state.async_stubs[i].phaseOne(phaseOneRequest.build(), phaseOne_observer);
                 }
             }
-            
+
             // RECEIVE PHASE ONE REPLY (Promise)
             phaseOne_collector.waitForTarget(1); // The majority is 2, so it's the leader plus 1
             if (phaseOne_responses.size() >= 1) {
@@ -96,10 +97,67 @@ class DadkvsServerPaxos {
 
         // Remove value from localOrderList, because it has already been decided by Paxos (so you don't try to propose it again)
         server_state.removeAndUpdateLocalOrder();
+        notifyAll(); // Allows the next Paxos to start for the new minLocalOrder
 
-        
+        // SEND LEARN REQUEST
+        DadkvsPaxos.LearnRequest.Builder learnRequest  = DadkvsPaxos.LearnRequest.newBuilder();
+        ArrayList<DadkvsPaxos.LearnReply> learn_responses = new ArrayList<>();
+        GenericResponseCollector<DadkvsPaxos.LearnReply> learn_collector = new GenericResponseCollector<>(learn_responses, server_state.n_servers);
+        learnRequest.setLearnconfig(my_current_config).setSeqNum(seqNum).setLearnvalue(reqid).setPriority(my_current_priority);
+        for (int i = 0; i < server_state.n_servers; i++) {
+            if (i != server_state.my_id){
+                CollectorStreamObserver<DadkvsPaxos.LearnReply> learn_observer = new CollectorStreamObserver<DadkvsPaxos.LearnReply>(learn_collector);
+                server_state.async_stubs[i].learn(learnRequest.build(), learn_observer);
+            }
+        }
+        learn_collector.waitForTarget(1); // Don't care about the replies
+        if (learn_responses.size() >= 1 ){
+            System.out.println("Success: At least one LearnRequest has been Replied");
+        } else {
+            System.err.println("ERROR: did not receive any responses");
+        }
+
+        return seqNum + 1; // To update the nextSeqNumToDecide
     }
 
+    public DadkvsPaxos.PhaseOneReply handlePhaseOneReply(int p1config, int p1seqNum, int p1priority){
+        boolean accepted;
+        DadkvsPaxos.PhaseOneReply phaseOne_reply;
+        if(server_state.nextSeqNumber <= p1seqNum){ // If the incoming seqNum is lower, it means the leader hasn't executed all the transactions already decided by previous consensus
+            accepted = true;
+        } else {
+            accepted = false;
+        }
+        phaseOne_reply.setPhase1Config(Math.max(my_current_config, p1config))
+                    .setSeqNum(Math.max(server_state.nextSeqNumber, p1seqNum))
+                    .setAccepted(accepted)
+                    .setPhase1value(lastReqIdproposed)
+                    .setPriority(-1); // Priority is ignored, so idk about this value
+        return phaseOne_reply;
+    }
 
+    public DadkvsPaxos.PhaseTwoReply handlePhaseTwoReply(int p2config, int p2seqNum, int p2value, int p2priority){
+        boolean accepted;
+        DadkvsPaxos.PhaseTwoReply phaseTwo_reply;
+        if(server_state.nextSeqNumber <= p2seqNum){ // If the incoming seqNum is lower, it means the leader hasn't executed all the transactions already decided by previous consensus
+            accepted = true;
+            lastReqIdproposed = p2value; // Value to be sent in PhaseOneReply
+        } else {
+            accepted = false;
+        }
+        phaseTwo_reply.setPhase2Config(Math.max(my_current_config, p2config))
+                    .setSeqNum(Math.max(server_state.nextSeqNumber, p2seqNum))
+                    .setAccepted(accepted);
+        return phaseTwo_reply;
+    }
+
+    public DadkvsPaxos.LearnReply handleLearnReply(int lconfig, int lseqNum, int lvalue, int lpriority){
+        boolean accepted = true;
+        DadkvsPaxos.LearnReply learn_reply;
+        learn_reply.setPhase2Config(Math.max(my_current_config, lconfig))
+                    .setSeqNum(server_state.nextSeqNumber) // send your own nextSeqNumber (because: Why not?)
+                    .setAccepted(accepted);
+        return learn_reply;
+    }
 
 }
