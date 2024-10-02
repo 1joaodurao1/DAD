@@ -29,17 +29,37 @@ public class DadkvsPaxosServiceImpl extends DadkvsPaxosServiceGrpc.DadkvsPaxosSe
     public void phaseOne(DadkvsPaxos.PhaseOneRequest request, StreamObserver<DadkvsPaxos.PhaseOneReply> responseObserver) {
         // for debug purposes
         System.out.println("Receive phase1 request: " + request);
+
+        DadkvsPaxos.PhaseOneReply response = server_state.paxos.handlePhaseOneReply(request.getPhase1Config(),
+                                                                                    request.getSeqNum(),
+                                                                                    request.getPriority());
+        responseObserver.onNext(response);
+        responseObserver.onCompleted();
     }
 
     @Override
     public void phaseTwo(DadkvsPaxos.PhaseTwoRequest request, StreamObserver<DadkvsPaxos.PhaseTwoReply> responseObserver) {
         // for debug purposes
         System.out.println ("Receive phase two request: " + request);
+
+        DadkvsPaxos.PhaseTwoReply response = server_state.paxos.handlePhaseTwoReply(request.getPhase2Config(),
+                                                                                    request.getSeqNum(),
+                                                                                    request.getPhase2Value(),
+                                                                                    request.getPriority());
+        responseObserver.onNext(response);
+        responseObserver.onCompleted();
     }
 
     @Override
     public void learn(DadkvsPaxos.LearnRequest request, StreamObserver<DadkvsPaxos.LearnReply> responseObserver) {
         // for debug purposes
         System.out.println("Receive learn request: " + request);
+
+        DadkvsPaxos.LearnReply response = server_state.paxos.handleLearnReply(request.getLearnconfig(),
+                                                                                    request.getSeqNum(),
+                                                                                    request.getLearnvalue(),
+                                                                                    request.getPriority());
+        responseObserver.onNext(response);
+        responseObserver.onCompleted();
     }
 }
