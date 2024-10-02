@@ -24,7 +24,7 @@ public class DadkvsServerState {
     int nextSeqNumber;
     ManagedChannel[]    server_channels;
     boolean isFreezed;
-    boolean isDelayed; 
+    boolean isDelayed;
     AtomicInteger localOrder;
     HashMap<Integer, Pair> learnCounter;
     ArrayList<Integer> localOrderList;
@@ -65,8 +65,8 @@ public class DadkvsServerState {
         } else {
             if (learnCounter.containsKey(reqid)){
                 // Incremente counter in Pair<SeqNum, int>
-                learnCounter.get(reqid).setReqCounter(learnCounter.get(reqid).getReqCounter() + 1);
-                System.out.println("[handleOrderID] Incremented HashMap entry of reqid " + reqid + "to the number" + learnCounter.get(reqid).getReqCounter());
+                learnCounter.get(reqid).setNum2(learnCounter.get(reqid).getNum2() + 1);
+                System.out.println("[handleOrderID] Incremented HashMap entry of reqid " + reqid + "to the number" + learnCounter.get(reqid).getNum2());
             } else {
                 learnCounter.put(reqid, new Pair(seqNumber, 0));
                 System.out.println("[handleOrderID] Created HashMap entry of reqid " + reqid + "with the number 1");
@@ -82,7 +82,7 @@ public class DadkvsServerState {
 
         synchronized(this){
 
-            while (!learnCounter.containsKey(reqid) || learnCounter.get(reqid).getReqCounter() < 2){ 
+            while (isFreezed || !learnCounter.containsKey(reqid) || !(learnCounter.get(reqid).getNum1() == nextSeqNumber && learnCounter.get(reqid).getNum2() >= 2)){ 
 
                 if ( this.i_am_leader && this.minLocalorder == localOrder_copy && nextSeqNumToDecide == nextSeqNumber){
                     System.out.println("[handleTRansaction] Im leader and starting paxos with local order number " + localOrder_copy);
@@ -95,7 +95,7 @@ public class DadkvsServerState {
                 }
 
             }
-            System.err.println("[handleTransaction] Im a learner and im going to commit with seqNumber " + learnCounter.get(reqid).getSeqNumber()+
+            System.err.println("[handleTransaction] Im a learner and im going to commit with seqNumber " + learnCounter.get(reqid).getNum1()+
             "and request id " + reqid);
             if(localOrderList.contains(localOrder_copy)){
                 this.localOrderList.remove(localOrder_copy); // in case leader is behind
@@ -146,6 +146,7 @@ public class DadkvsServerState {
                 break;
             case 3:
                 this.isFreezed = false;
+                notifyAll();
                 break;
             case 4:
                 this.isDelayed = true;

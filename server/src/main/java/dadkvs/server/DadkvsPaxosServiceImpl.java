@@ -29,7 +29,11 @@ public class DadkvsPaxosServiceImpl extends DadkvsPaxosServiceGrpc.DadkvsPaxosSe
     public void phaseOne(DadkvsPaxos.PhaseOneRequest request, StreamObserver<DadkvsPaxos.PhaseOneReply> responseObserver) {
         // for debug purposes
         System.out.println("Receive phase1 request: " + request);
-
+        while (server_state.isFreezed){
+            System.out.println("I am freezed ");
+            try { wait ();}
+            catch (InterruptedException e) {} // Ignore
+        }
         DadkvsPaxos.PhaseOneReply response = server_state.paxos.handlePhaseOneReply(request.getPhase1Config(),
                                                                                     request.getSeqNum(),
                                                                                     request.getPriority());
@@ -41,7 +45,11 @@ public class DadkvsPaxosServiceImpl extends DadkvsPaxosServiceGrpc.DadkvsPaxosSe
     public void phaseTwo(DadkvsPaxos.PhaseTwoRequest request, StreamObserver<DadkvsPaxos.PhaseTwoReply> responseObserver) {
         // for debug purposes
         System.out.println ("Receive phase two request: " + request);
-
+        while (server_state.isFreezed){
+            System.out.println("I am freezed ");
+            try { wait ();}
+            catch (InterruptedException e) {} // Ignore
+        }
         DadkvsPaxos.PhaseTwoReply response = server_state.paxos.handlePhaseTwoReply(request.getPhase2Config(),
                                                                                     request.getSeqNum(),
                                                                                     request.getPhase2Value(),
@@ -54,7 +62,11 @@ public class DadkvsPaxosServiceImpl extends DadkvsPaxosServiceGrpc.DadkvsPaxosSe
     public void learn(DadkvsPaxos.LearnRequest request, StreamObserver<DadkvsPaxos.LearnReply> responseObserver) {
         // for debug purposes
         System.out.println("Receive learn request: " + request);
-
+        while (server_state.isFreezed){
+            System.out.println("I am freezed ");
+            try { wait ();}
+            catch (InterruptedException e) {} // Ignore
+        }
         DadkvsPaxos.LearnReply response = server_state.paxos.handleLearnReply(request.getLearnconfig(),
                                                                                     request.getSeqNum(),
                                                                                     request.getLearnvalue(),
