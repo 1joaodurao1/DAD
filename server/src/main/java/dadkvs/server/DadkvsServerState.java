@@ -69,8 +69,8 @@ public class DadkvsServerState {
                 learnCounter.get(reqid).setNum2(learnCounter.get(reqid).getNum2() + 1);
                 System.out.println("[handleOrderID] Incremented HashMap entry of reqid " + reqid + "to the number" + learnCounter.get(reqid).getNum2());
             } else {
-                learnCounter.put(reqid, new Pair(seqNumber, 0));
-                System.out.println("[handleOrderID] Created HashMap entry of reqid " + reqid + "with the number 1");
+                learnCounter.put(reqid, new Pair(seqNumber, 1));
+                System.out.println("[handleOrderID] Created HashMap entry of reqid " + reqid + "with the number 1 ");
             }
             notifyAll(); // To release the wait()s in handleTransaction to check if t
         }
@@ -79,6 +79,8 @@ public class DadkvsServerState {
     public boolean handleTransaction(int reqid, TransactionRecord record){
 
         int localOrder_copy = this.localOrder.getAndIncrement();
+        localOrderList.add(localOrder_copy);
+        minLocalorder = Collections.min(localOrderList);
         int nextSeqNumToDecide = nextSeqNumber;
 
         synchronized(this){
@@ -90,6 +92,9 @@ public class DadkvsServerState {
                 System.out.println("[handleTRansaction] localOrder_copy = " +  localOrder_copy);
                 System.out.println("[handleTRansaction] nextSeqNumToDecide = " +  nextSeqNumToDecide);
                 System.out.println("[handleTRansaction] nextSeqNumber = " +  nextSeqNumber);
+                System.out.println("[handleTRansaction] localOrderList = " +  localOrderList);
+                if (learnCounter.containsKey(reqid) )
+                    System.out.println("[handleTRansaction]: " +learnCounter.get(reqid).getNum1());
                 if ( this.i_am_leader && this.minLocalorder == localOrder_copy && nextSeqNumToDecide == nextSeqNumber){
                     System.out.println("[handleTRansaction] Im leader and starting paxos with local order number " + localOrder_copy);
                     // chamar paxos
@@ -104,7 +109,7 @@ public class DadkvsServerState {
             System.out.println("[handleTransaction] Im a learner and im going to commit with seqNumber " + learnCounter.get(reqid).getNum1()+
             "and request id " + reqid);
             if(localOrderList.contains(localOrder_copy)){
-                this.localOrderList.remove(localOrder_copy); // in case leader is behind
+                this.localOrderList.remove((Integer) this.minLocalorder); // in case leader is behind
                 if(localOrderList.size() > 0){
                     this.minLocalorder = Collections.min(localOrderList);
                 } else {
@@ -174,7 +179,7 @@ public class DadkvsServerState {
 
     public void removeAndUpdateLocalOrder (){
         if(localOrderList.contains(this.minLocalorder)){
-            this.localOrderList.remove(this.minLocalorder);
+            this.localOrderList.remove((Integer) this.minLocalorder );
         }
         if(localOrderList.size() > 0){
             this.minLocalorder = Collections.min(localOrderList);
