@@ -48,7 +48,7 @@ public class DadkvsServerState {
         isDelayed = false;
         isFreezed = false;
         server_channels = channels;
-        localOrder.set(0);
+        localOrder = new AtomicInteger(0);
         learnCounter = new HashMap<>();
         localOrderList = new ArrayList<Integer>();
         paxos = new DadkvsServerPaxos(0,this);
