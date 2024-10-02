@@ -55,10 +55,10 @@ class DadkvsServerPaxos {
                 Iterator<DadkvsPaxos.PhaseOneReply> phaseOne_iterator = phaseOne_responses.iterator();
 			    DadkvsPaxos.PhaseOneReply phaseOne_reply = phaseOne_iterator.next();
 
-                // Check seqNum value
+                // Check seqNum value, not needed
                 if (phaseOne_reply.getSeqNum() > seqNum) {
                     // This leader has missed at least one consensus, you need to check which transaction requests were already processed
-                    return phaseOne_reply.getSeqNum();
+                    System.err.println("[handleLeaderPaxos] Reply2 - ERROR: Should not have received a different seqNumber!");
                 }
                 // Check accepted value
                 if (phaseOne_reply.getAccepted()){ // Being accpted <=> my priority
@@ -123,6 +123,7 @@ class DadkvsServerPaxos {
         }
 
         // SEND LEARN REQUEST
+        server_state.learnCounter.put(reqid, new Pair(seqNum, 1)); //since I am leader assume I already received one learn request 
         DadkvsPaxos.LearnRequest.Builder learnRequest  = DadkvsPaxos.LearnRequest.newBuilder();
         ArrayList<DadkvsPaxos.LearnReply> learn_responses = new ArrayList<>();
         GenericResponseCollector<DadkvsPaxos.LearnReply> learn_collector = new GenericResponseCollector<>(learn_responses, server_state.n_servers);
@@ -135,7 +136,7 @@ class DadkvsServerPaxos {
         }
         learn_collector.waitForTarget(1); // Don't care about the replies
         if (learn_responses.size() >= 1 ){
-            System.out.println("Success: At least one LearnRequest has been Replied");
+            System.out.println("[handleLeaderPaxos] Success: At least one LearnRequest has been Replied");
         } else {
             System.err.println("ERROR: did not receive any responses");
         }
@@ -177,6 +178,24 @@ class DadkvsServerPaxos {
         if(paxosLogs.get(p2seqNum).getNum2() <= p2priority){ // If the incoming p2seqNum is lower, it means the leader hasn't executed all the transactions already decided by previous consensus
             accepted = true;
             paxosLogs.get(p2seqNum).setNum1(p2value); // Value to be sent in PhaseOneReply
+            // accepters goig to send learnRequest
+            DadkvsPaxos.LearnRequest.Builder learnRequest  = DadkvsPaxos.LearnRequest.newBuilder();
+            ArrayList<DadkvsPaxos.LearnReply> learn_responses = new ArrayList<>();
+            GenericResponseCollector<DadkvsPaxos.LearnReply> learn_collector = new GenericResponseCollector<>(learn_responses, server_state.n_servers);
+            learnRequest.setLearnconfig(my_current_config).setSeqNum(p2seqNum).setLearnvalue(p2value).setPriority(p2priority);
+            for (int i = 0; i < server_state.n_servers; i++) {
+                if (i != server_state.my_id){
+                    CollectorStreamObserver<DadkvsPaxos.LearnReply> learn_observer = new CollectorStreamObserver<DadkvsPaxos.LearnReply>(learn_collector);
+                    server_state.async_stubs[i].learn(learnRequest.build(), learn_observer);
+                }
+            }
+            learn_collector.waitForTarget(1); // Don't care about the replies
+            if (learn_responses.size() >= 1 ){
+                System.out.println("[handlePhaseTwoReply] Success: At least one LearnRequest has been Replied");
+            } else {
+                System.err.println("ERROR: did not receive any responses");
+            }
+
         } else {
             accepted = false;
         }
@@ -187,6 +206,8 @@ class DadkvsServerPaxos {
         System.out.println("\n[handlePhaseTwoReply] Reply.phase2Config = " + phaseTwo_reply.getPhase2Config());
         System.out.println("[handlePhaseTwoReply] Reply.seqNum = " + phaseTwo_reply.getSeqNum());
         System.out.println("[handlePhaseTwoReply] Reply.phase2Accepted = " + phaseTwo_reply.getPhase2Accepted());
+
+
         return phaseTwo_reply.build();
     }
 
