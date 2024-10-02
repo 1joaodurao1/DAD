@@ -55,10 +55,10 @@ class DadkvsServerPaxos {
                 Iterator<DadkvsPaxos.PhaseOneReply> phaseOne_iterator = phaseOne_responses.iterator();
 			    DadkvsPaxos.PhaseOneReply phaseOne_reply = phaseOne_iterator.next();
 
-                // Check seqNum value
+                // Check seqNum value, not needed
                 if (phaseOne_reply.getSeqNum() > seqNum) {
                     // This leader has missed at least one consensus, you need to check which transaction requests were already processed
-                    return phaseOne_reply.getSeqNum();
+                    System.err.println("[handleLeaderPaxos] Reply2 - ERROR: Should not have received a different seqNumber!");
                 }
                 // Check accepted value
                 if (phaseOne_reply.getAccepted()){ // Being accpted <=> my priority
