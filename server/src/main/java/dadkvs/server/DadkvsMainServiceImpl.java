@@ -25,6 +25,7 @@ public class DadkvsMainServiceImpl extends DadkvsMainServiceGrpc.DadkvsMainServi
 		if (this.server_state.isDelayed){
 			this.server_state.insertDelay();
 		}
+
 		int reqid = request.getReqid();
 		int key = request.getKey();
 		VersionedValue vv = this.server_state.store.read(key);
@@ -57,13 +58,11 @@ public class DadkvsMainServiceImpl extends DadkvsMainServiceGrpc.DadkvsMainServi
 		int writeval = request.getWriteval();
 
 		// for debug purposes
-		System.out.println("reqid " + reqid + " key1 " + key1 + " v1 " + version1 + " k2 " + key2 + " v2 " + version2 + " wk " + writekey + " writeval " + writeval);
-
+		System.out.println("Received commit request: reqid " + reqid + " key1 " + key1 + " v1 " + version1 + " k2 " + key2 + " v2 " + version2 + " wk " + writekey + " writeval " + writeval);
 
 		this.timestamp++;
 		TransactionRecord txrecord = new TransactionRecord (key1, version1, key2, version2, writekey, writeval, this.timestamp);
 		boolean result = this.server_state.handleTransaction(reqid, txrecord); // Has a wait
-
 
 		// for debug purposes
 		System.out.println("Result is ready for request with reqid " + reqid + "and result " + result);
@@ -74,6 +73,7 @@ public class DadkvsMainServiceImpl extends DadkvsMainServiceGrpc.DadkvsMainServi
 		responseObserver.onNext(response);
 		responseObserver.onCompleted();
 
-		System.out.println("committx DONE"); //TODO: remove this?
-    }	
+		// Debug message
+		System.out.println("#---------- committx DONE ----------#");
+    }
 }

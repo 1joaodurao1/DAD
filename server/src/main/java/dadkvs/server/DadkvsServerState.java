@@ -12,105 +12,112 @@ import io.grpc.ManagedChannel;
 
 public class DadkvsServerState {
     boolean        i_am_leader;
-    int            debug_mode;
     int            base_port;
     int            my_id;
     int            store_size;
     KeyValueStore  store;
     MainLoop       main_loop;
     Thread         main_loop_worker;
-    final int                           n_servers;
+    // Stubs and communication
+    ManagedChannel[]                                server_channels;
     DadkvsPaxosServiceGrpc.DadkvsPaxosServiceStub[] async_stubs;
-    int nextSeqNumber;
-    ManagedChannel[]    server_channels;
+    final int                                       n_servers;
+    // ConsoleClient commands
+    int     debug_mode;
     boolean isFreezed;
     boolean isDelayed;
-    AtomicInteger localOrder;
-    HashMap<Integer, Pair> learnCounter;
-    ArrayList<Integer> localOrderList;
-    int minLocalorder;
-    DadkvsServerPaxos paxos;
-
+    // Variables to control GLOBAL order
+    int                     nextSeqNumber;
+    HashMap<Integer, Pair>  learnCounter;
+    // Variables to control next transaction to propose (only relevant if I am leader)
+    AtomicInteger       localOrderCounter;
+    ArrayList<Integer>  localOrderList;
+    int                 minLocalorder;
+    // Class with handlers for Paxos execution
+    DadkvsServerPaxos   paxos;
 
 
     public DadkvsServerState(int kv_size, int port, int myself, int servers,
                             DadkvsPaxosServiceGrpc.DadkvsPaxosServiceStub[] paxoStubs,
-                             ManagedChannel[] channels) {
+                            ManagedChannel[] channels) {
+        i_am_leader = false;
         base_port = port;
         my_id = myself;
-        i_am_leader = false;
-        debug_mode = 0;
         store_size = kv_size;
         store = new KeyValueStore(kv_size);
-        n_servers = servers;
+
+        server_channels = channels;
         async_stubs = paxoStubs;
-        nextSeqNumber = 0;
+        n_servers = servers;
+
+        debug_mode = 0;
         isDelayed = false;
         isFreezed = false;
-        server_channels = channels;
-        localOrder = new AtomicInteger(0);
+
+        nextSeqNumber = 0;
         learnCounter = new HashMap<>();
+
+        localOrderCounter = new AtomicInteger(0);
         localOrderList = new ArrayList<Integer>();
         minLocalorder = 0;
+
         paxos = new DadkvsServerPaxos(0,this);
+
         main_loop = new MainLoop(this);
         main_loop_worker = new Thread (main_loop);
         main_loop_worker.start();
-
     }
 
     public synchronized void handleOrderID(int reqid, int seqNumber){
         if (nextSeqNumber > seqNumber){
             // This request has already been processed
-            System.out.println("[handleOrderID] Ignore: nextSeqNumber " + nextSeqNumber + "is HIGHER than the seqNumber received " + seqNumber);
+            System.out.println("[handleOrderID] Ignored: nextSeqNumber " + nextSeqNumber + "is HIGHER than the seqNumber received " + seqNumber);
         } else {
             if (learnCounter.containsKey(reqid)){
-                // Incremente counter in Pair<SeqNum, int>
+                // Increment LearnRequest (Num2) counter in Pair<SeqNum, counter>
                 learnCounter.get(reqid).setNum2(learnCounter.get(reqid).getNum2() + 1);
                 System.out.println("[handleOrderID] Incremented HashMap entry of reqid " + reqid + " to " + learnCounter.get(reqid).getNum2());
+                notifyAll(); // To release the wait()s in handleTransaction
             } else {
                 learnCounter.put(reqid, new Pair(seqNumber, 1));
                 System.out.println("[handleOrderID] Created HashMap entry of reqid " + reqid + " with the number 1 ");
             }
-            notifyAll(); // To release the wait()s in handleTransaction to check if t
         }
     }
 
     public boolean handleTransaction(int reqid, TransactionRecord record){
-
-        int localOrder_copy = this.localOrder.getAndIncrement();
+        int localOrder_copy = this.localOrderCounter.getAndIncrement();
         localOrderList.add(localOrder_copy);
-        minLocalorder = Collections.min(localOrderList);
+        this.minLocalorder = Collections.min(localOrderList);
 
         synchronized(this){
-
-            while (!learnCounter.containsKey(reqid) || !(learnCounter.get(reqid).getNum1() == nextSeqNumber && learnCounter.get(reqid).getNum2() >= 2)){ 
+            // Stay in this loop until you receive 2 LearnRequests for your transaction and the seqNum they have is the next one in line (nextSeqNumber)
+            while (!learnCounter.containsKey(reqid) || !(learnCounter.get(reqid).getNum1() == nextSeqNumber && learnCounter.get(reqid).getNum2() >= 2)){
                 // Debug Messages
-                System.out.println("[handleTRansaction] i_am_leader = " +  this.i_am_leader);
+                System.out.println("\n[handleTRansaction] i_am_leader = " +  this.i_am_leader);
                 System.out.println("[handleTRansaction] this.minLocalorder = " +  this.minLocalorder);
                 System.out.println("[handleTRansaction] localOrder_copy = " +  localOrder_copy);
                 System.out.println("[handleTRansaction] nextSeqNumber = " +  nextSeqNumber);
                 System.out.println("[handleTRansaction] localOrderList = " +  localOrderList);
-                if (learnCounter.containsKey(reqid) ){
+                if (learnCounter.containsKey(reqid) ){ // This "if" is to avoid NULL pointer exceptions
                     System.out.println("[handleTRansaction]:SeqNumber of learnCounter " +learnCounter.get(reqid).getNum1());
                     System.out.println("[handleTRansaction]:Number of Learn Requests " +learnCounter.get(reqid).getNum2());
                 }
+
                 if (this.i_am_leader && this.minLocalorder == localOrder_copy){
-                    System.out.println("[handleTRansaction] Im leader and starting paxos with local order number " + localOrder_copy);
-                    // chamar paxos
-                    // We add learnCounter.size() because there could be Transactions already accepted in Paxos, but that haven't yet received the 2nd LearnRequest, removed their hashMap entry and incremented the nextSeqNum
+                    System.out.println("[handleTRansaction] Im leader and starting paxos with localOrder_copy = " + localOrder_copy);
+                    // We add learnCounter.size() because there could be Transactions that were already accepted in Paxos, but that haven't yet received
+                    //  the 2nd LearnRequest, removed their learnCounter entry and, subsequently, incremented the nextSeqNum
                     this.paxos.handleLeaderPaxos(nextSeqNumber + learnCounter.size(), reqid);
-                }
-                else {
+                } else {
                     try { wait ();}
                     catch (InterruptedException e) {} // Ignore
                 }
             }
-
-            System.out.println("[handleTransaction] Im a learner and im going to commit with seqNumber " + learnCounter.get(reqid).getNum1()+
-            "and request id " + reqid);
+            System.out.println("[handleTransaction] Im a learner and im going to commit with seqNumber = " + learnCounter.get(reqid).getNum1() + "and request id " + reqid);
             if(localOrderList.contains(localOrder_copy)){
-                this.localOrderList.remove((Integer) this.minLocalorder); // in case leader is behind
+                // If I was previously not leader and I became leader, I have to update the minLocalorder to propose the next Transaction in this LOCAL order
+                this.localOrderList.remove((Integer) this.minLocalorder);
                 if(localOrderList.size() > 0){
                     this.minLocalorder = Collections.min(localOrderList);
                 } else {
@@ -120,16 +127,16 @@ public class DadkvsServerState {
             boolean result = this.store.commit(record);
             learnCounter.remove(reqid);
             nextSeqNumber++;
-            notifyAll();
+            notifyAll(); // Tell the next transaction to execute, if it's ready (i.e. received at least 2 LearnRequests)
             return result;
         }
     }
 
     public void server_exit(){
         System.out.println("Quitting the process and exiting.");
-        // desconnecting the channels before exiting
+        // Desconnecting the channels before exiting
         for (int i = 0; i < n_servers; i++) {
-            if (i != my_id) { // Don't make a Stub to yourself
+            if (i != my_id) { // Don't shutDown the channel to yourself, because it doesn't exist
                 server_channels[i].shutdownNow();
             }
         }
@@ -143,7 +150,6 @@ public class DadkvsServerState {
                 try { wait ();}
                 catch (InterruptedException e) {} // Ignore
             }
-            
         }
     }
 
@@ -152,7 +158,7 @@ public class DadkvsServerState {
         int delay = random.nextInt(2500); // Random delay between 0 and 2500 ms
 
         // For debug purposes
-        System.out.println("Random delay: " + delay + " milliseconds.");
+        System.out.println("\n[insertDelay] Random delay: " + delay + " milliseconds.");
 
         try {
             Thread.sleep(delay); // Introduce the delay
@@ -162,12 +168,11 @@ public class DadkvsServerState {
     }
 
     public void handleDebug(int mode) {
-
         this.debug_mode = mode;
 
         switch(mode) {
             case 1:
-                System.out.println("System shutting down");
+                System.out.println("\n[handleDebug] System shutting down");
             case 2:
                 this.isFreezed = true;
                 break;
@@ -184,7 +189,7 @@ public class DadkvsServerState {
                 this.isDelayed = false;
                 break;
             default:
-                System.err.println("ERROR: Default mode not known");
+                System.err.println("\n[handleDebug] ERROR: Default mode not known");
                 break;
         }
     }

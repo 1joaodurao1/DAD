@@ -29,7 +29,7 @@ public class DadkvsPaxosServiceImpl extends DadkvsPaxosServiceGrpc.DadkvsPaxosSe
     public void phaseOne(DadkvsPaxos.PhaseOneRequest request, StreamObserver<DadkvsPaxos.PhaseOneReply> responseObserver) {
         // for debug purposes
         System.out.println("Receive phase1 request: " + request);
-       
+
         if ( this.server_state.isFreezed){
             this.server_state.freezeServer();
         }
@@ -48,6 +48,7 @@ public class DadkvsPaxosServiceImpl extends DadkvsPaxosServiceGrpc.DadkvsPaxosSe
     public void phaseTwo(DadkvsPaxos.PhaseTwoRequest request, StreamObserver<DadkvsPaxos.PhaseTwoReply> responseObserver) {
         // for debug purposes
         System.out.println ("Receive phase two request: " + request);
+
         if ( this.server_state.isFreezed){
             this.server_state.freezeServer();
         }
@@ -67,10 +68,10 @@ public class DadkvsPaxosServiceImpl extends DadkvsPaxosServiceGrpc.DadkvsPaxosSe
     public void learn(DadkvsPaxos.LearnRequest request, StreamObserver<DadkvsPaxos.LearnReply> responseObserver) {
         // for debug purposes
         System.out.println("Receive learn request: " + request);
+
         if ( this.server_state.isFreezed){
             this.server_state.freezeServer();
         }
-        
         if (this.server_state.isDelayed){
 			this.server_state.insertDelay();
 		}

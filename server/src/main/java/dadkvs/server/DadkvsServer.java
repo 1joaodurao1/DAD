@@ -36,21 +36,25 @@ public class DadkvsServer {
 		int base_port = Integer.valueOf(args[0]);
 		int my_id     = Integer.valueOf(args[1]);
 
+		// Create a target address for each server
 		String host = "localhost";
 		String[] targets  = new String[n_servers];
-		for (int i = 0; i < n_servers; i++) { // Create a target address for each server
+		for (int i = 0; i < n_servers; i++) {
 			int target_port = base_port + i;
 			targets[i] = new String();
 			targets[i] = host + ":" + target_port;
 			System.out.printf("targets[%d] = %s%n", i, targets[i]);
 		}
 
+		// Create a channel for each server
 		ManagedChannel[] channels = new ManagedChannel[n_servers];
 		for (int i = 0; i < n_servers; i++) {
 			if (i != my_id){ // Don't make a channel to yourself
 				channels[i] = ManagedChannelBuilder.forTarget(targets[i]).usePlaintext().build();
 			}
 		}
+
+		// Create Stub to each server
 		DadkvsPaxosServiceGrpc.DadkvsPaxosServiceStub[] paxos_stubs = new DadkvsPaxosServiceGrpc.DadkvsPaxosServiceStub[n_servers];
 		for (int i = 0; i < n_servers; i++) {
 			if (i != my_id){ // Don't make a Stub to yourself
@@ -58,7 +62,8 @@ public class DadkvsServer {
 			}
 		}
 
-		server_state = new DadkvsServerState(kvsize, base_port, my_id, n_servers, paxos_stubs, channels); // Creating this State Machine starts the Main Loop
+		// Creating this State Machine starts the Main Loop
+		server_state = new DadkvsServerState(kvsize, base_port, my_id, n_servers, paxos_stubs, channels);
 
 		port = base_port + my_id;
 
