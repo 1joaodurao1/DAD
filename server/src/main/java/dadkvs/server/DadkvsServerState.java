@@ -81,26 +81,25 @@ public class DadkvsServerState {
         int localOrder_copy = this.localOrder.getAndIncrement();
         localOrderList.add(localOrder_copy);
         minLocalorder = Collections.min(localOrderList);
-        int nextSeqNumToDecide = nextSeqNumber;
 
         synchronized(this){
 
-            while (isFreezed || !learnCounter.containsKey(reqid) || !(learnCounter.get(reqid).getNum1() == nextSeqNumber && learnCounter.get(reqid).getNum2() >= 2)){ 
+            while (!learnCounter.containsKey(reqid) || !(learnCounter.get(reqid).getNum1() == nextSeqNumber && learnCounter.get(reqid).getNum2() >= 2)){ 
                 // Debug Messages
                 System.out.println("[handleTRansaction] i_am_leader = " +  this.i_am_leader);
                 System.out.println("[handleTRansaction] this.minLocalorder = " +  this.minLocalorder);
                 System.out.println("[handleTRansaction] localOrder_copy = " +  localOrder_copy);
-                System.out.println("[handleTRansaction] nextSeqNumToDecide = " +  nextSeqNumToDecide);
                 System.out.println("[handleTRansaction] nextSeqNumber = " +  nextSeqNumber);
                 System.out.println("[handleTRansaction] localOrderList = " +  localOrderList);
                 if (learnCounter.containsKey(reqid) ){
                     System.out.println("[handleTRansaction]:SeqNumber of learnCounter " +learnCounter.get(reqid).getNum1());
                     System.out.println("[handleTRansaction]:Number of Learn Requests " +learnCounter.get(reqid).getNum2());
                 }
-                if ( this.i_am_leader && this.minLocalorder == localOrder_copy && nextSeqNumToDecide == nextSeqNumber){
+                if (this.i_am_leader && this.minLocalorder == localOrder_copy){
                     System.out.println("[handleTRansaction] Im leader and starting paxos with local order number " + localOrder_copy);
                     // chamar paxos
-                    nextSeqNumToDecide = this.paxos.handleLeaderPaxos(nextSeqNumber, reqid);
+                    // We add learnCounter.size() because there could be Transactions already accepted in Paxos, but that haven't yet received the 2nd LearnRequest, removed their hashMap entry and incremented the nextSeqNum
+                    this.paxos.handleLeaderPaxos(nextSeqNumber + learnCounter.size(), reqid);
                 }
                 else {
                     try { wait ();}
@@ -198,6 +197,12 @@ public class DadkvsServerState {
             this.minLocalorder = Collections.min(localOrderList);
         } else {
             this.minLocalorder = 0;
+        }
+    }
+
+    public void notifyEveryone(){
+        synchronized(this){
+            notifyAll();
         }
     }
 

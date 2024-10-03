@@ -120,11 +120,11 @@ class DadkvsServerPaxos {
         synchronized(this){
             // Remove value from localOrderList, because it has already been decided by Paxos (so you don't try to propose it again)
             server_state.removeAndUpdateLocalOrder();
-            notifyAll(); // Allows the next Paxos to start for the new minLocalOrder
+            server_state.notifyEveryone(); // Allows the next Paxos to start for the new minLocalOrder
         }
         server_state.learnCounter.put(reqid, new Pair(seqNum, 1));
+
         // SEND LEARN REQUEST
-       
         DadkvsPaxos.LearnRequest.Builder learnRequest  = DadkvsPaxos.LearnRequest.newBuilder();
         ArrayList<DadkvsPaxos.LearnReply> learn_responses = new ArrayList<>();
         GenericResponseCollector<DadkvsPaxos.LearnReply> learn_collector = new GenericResponseCollector<>(learn_responses, server_state.n_servers);
