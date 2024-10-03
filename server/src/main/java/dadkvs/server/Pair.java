@@ -2,21 +2,21 @@ package dadkvs.server;
 
 public class Pair {
 
-    private int sequenceNumber;
-    private int requestCounter;
+    private int num1;
+    private int num2;
 
 
-    public Pair(int seqNumber , int reqCounter){
+    public Pair(int num1 , int num2){
 
-        sequenceNumber = seqNumber;
-        requestCounter = reqCounter;
+        this.num1 = num1;
+        this.num2 = num2;
     }
 
-    public int getNum1(){return this.sequenceNumber;}
+    public int getNum1(){return this.num1;}
 
-    public int getNum2(){return this.requestCounter;}
+    public int getNum2(){return this.num2;}
 
-    public void setNum1( int seqNumber){ this.sequenceNumber = seqNumber; }
+    public void setNum1( int num1){ this.num1 = num1; }
 
-    public void setNum2 (int reqCounter) { this.requestCounter = reqCounter;}
+    public void setNum2 (int num2) { this.num2 = num2;}
 }
