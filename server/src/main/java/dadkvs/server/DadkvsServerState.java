@@ -67,10 +67,10 @@ public class DadkvsServerState {
             if (learnCounter.containsKey(reqid)){
                 // Incremente counter in Pair<SeqNum, int>
                 learnCounter.get(reqid).setNum2(learnCounter.get(reqid).getNum2() + 1);
-                System.out.println("[handleOrderID] Incremented HashMap entry of reqid " + reqid + "to the number" + learnCounter.get(reqid).getNum2());
+                System.out.println("[handleOrderID] Incremented HashMap entry of reqid " + reqid + " to " + learnCounter.get(reqid).getNum2());
             } else {
                 learnCounter.put(reqid, new Pair(seqNumber, 1));
-                System.out.println("[handleOrderID] Created HashMap entry of reqid " + reqid + "with the number 1 ");
+                System.out.println("[handleOrderID] Created HashMap entry of reqid " + reqid + " with the number 1 ");
             }
             notifyAll(); // To release the wait()s in handleTransaction to check if t
         }
@@ -93,8 +93,10 @@ public class DadkvsServerState {
                 System.out.println("[handleTRansaction] nextSeqNumToDecide = " +  nextSeqNumToDecide);
                 System.out.println("[handleTRansaction] nextSeqNumber = " +  nextSeqNumber);
                 System.out.println("[handleTRansaction] localOrderList = " +  localOrderList);
-                if (learnCounter.containsKey(reqid) )
-                    System.out.println("[handleTRansaction]: " +learnCounter.get(reqid).getNum1());
+                if (learnCounter.containsKey(reqid) ){
+                    System.out.println("[handleTRansaction]:SeqNumber of learnCounter " +learnCounter.get(reqid).getNum1());
+                    System.out.println("[handleTRansaction]:Number of Learn Requests " +learnCounter.get(reqid).getNum2());
+                }
                 if ( this.i_am_leader && this.minLocalorder == localOrder_copy && nextSeqNumToDecide == nextSeqNumber){
                     System.out.println("[handleTRansaction] Im leader and starting paxos with local order number " + localOrder_copy);
                     // chamar paxos
@@ -133,6 +135,17 @@ public class DadkvsServerState {
             }
         }
         System.exit(0); // crashing the server
+    }
+
+    public void freezeServer(){
+        synchronized (this) {
+            while (this.isFreezed){
+                System.out.println("I am freezed ");
+                try { wait ();}
+                catch (InterruptedException e) {} // Ignore
+            }
+            
+        }
     }
 
     public void insertDelay(){
