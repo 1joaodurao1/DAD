@@ -127,7 +127,13 @@ class DadkvsServerPaxos {
             server_state.notifyEveryone(); // Allows the next Paxos to start for the transaction with the new minLocalOrder
         }
         // Since the reqid was already accepted in Paxos, we assume the leader receives their own LearnRequest
-        server_state.learnCounter.put(reqid, new Pair(seqNum, 1));
+        // server_state.learnCounter.put(reqid, new Pair(seqNum, 1));
+        if (!server_state.learnCounter.containsKey(reqid)){
+                server_state.learnCounter.put(reqid, new Pair(seqNum, 1));
+        } else {
+                server_state.learnCounter.get(reqid).setNum2(server_state.learnCounter.get(reqid).getNum2() + 1);
+                server_state.notifyEveryone();
+        }
 
         // SEND LEARN REQUEST
         DadkvsPaxos.LearnRequest.Builder learnRequest  = DadkvsPaxos.LearnRequest.newBuilder();
@@ -222,6 +228,7 @@ class DadkvsServerPaxos {
                 server_state.learnCounter.put(p2value, new Pair(p2seqNum, 1));
             else{
                 server_state.learnCounter.get(p2value).setNum2(server_state.learnCounter.get(p2value).getNum2() + 1);
+                server_state.notifyEveryone();
             }
         } else {
             accepted = false;

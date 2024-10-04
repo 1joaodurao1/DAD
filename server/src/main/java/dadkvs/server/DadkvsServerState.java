@@ -59,7 +59,7 @@ public class DadkvsServerState {
 
         localOrderCounter = new AtomicInteger(0);
         localOrderList = new ArrayList<Integer>();
-        minLocalorder = 0;
+        minLocalorder = -1;
 
         paxos = new DadkvsServerPaxos(0,this);
 
@@ -71,7 +71,7 @@ public class DadkvsServerState {
     public synchronized void handleOrderID(int reqid, int seqNumber){
         if (nextSeqNumber > seqNumber){
             // This request has already been processed
-            System.out.println("[handleOrderID] Ignored: nextSeqNumber " + nextSeqNumber + "is HIGHER than the seqNumber received " + seqNumber);
+            System.out.println("[handleOrderID] Ignored: nextSeqNumber " + nextSeqNumber + " is HIGHER than the seqNumber received " + seqNumber);
         } else {
             if (learnCounter.containsKey(reqid)){
                 // Increment LearnRequest (Num2) counter in Pair<SeqNum, counter>
@@ -107,8 +107,8 @@ public class DadkvsServerState {
                 if (this.i_am_leader && this.minLocalorder == localOrder_copy){
                     System.out.println("[handleTRansaction] Im leader and starting paxos with localOrder_copy = " + localOrder_copy);
                     // We add learnCounter.size() because there could be Transactions that were already accepted in Paxos, but that haven't yet received
-                    //  the 2nd LearnRequest, removed their learnCounter entry and, subsequently, incremented the nextSeqNum
-                    this.paxos.handleLeaderPaxos(nextSeqNumber + learnCounter.size(), reqid);
+                    //  the 2nd LearnRequest, removed their learnCounter entry and, subsequently, incremented the nextSeqNum (retirei  + learnCounter.size())
+                    this.paxos.handleLeaderPaxos(nextSeqNumber, reqid);
                 } else {
                     try { wait ();}
                     catch (InterruptedException e) {} // Ignore
@@ -121,7 +121,7 @@ public class DadkvsServerState {
                 if(localOrderList.size() > 0){
                     this.minLocalorder = Collections.min(localOrderList);
                 } else {
-                    this.minLocalorder = 0;
+                    this.minLocalorder = -1; // Default value when there is no transaction to execute
                 }
             }
             boolean result = this.store.commit(record);
@@ -194,14 +194,14 @@ public class DadkvsServerState {
         }
     }
 
-    public void removeAndUpdateLocalOrder (){
+    public void removeAndUpdateLocalOrder(){
         if(localOrderList.contains(this.minLocalorder)){
             this.localOrderList.remove((Integer) this.minLocalorder );
         }
         if(localOrderList.size() > 0){
             this.minLocalorder = Collections.min(localOrderList);
         } else {
-            this.minLocalorder = 0;
+            this.minLocalorder = -1; // Default value when there is no transaction to execute
         }
     }
 
