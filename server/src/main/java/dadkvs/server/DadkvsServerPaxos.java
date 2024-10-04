@@ -121,11 +121,6 @@ class DadkvsServerPaxos {
             }
         }
 
-        synchronized(this){
-            // Remove value from localOrderList, because it has already been decided by Paxos (so you don't try to propose it again)
-            server_state.removeAndUpdateLocalOrder();
-            server_state.notifyEveryone(); // Allows the next Paxos to start for the transaction with the new minLocalOrder
-        }
         // Since the reqid was already accepted in Paxos, we assume the leader receives their own LearnRequest
         // server_state.learnCounter.put(reqid, new Pair(seqNum, 1));
         if (!server_state.learnCounter.containsKey(reqid)){
