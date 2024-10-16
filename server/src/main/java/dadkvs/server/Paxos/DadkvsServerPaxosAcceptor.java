@@ -1,4 +1,4 @@
-package dadkvs.server;
+package dadkvs.server.Paxos;
 
 import dadkvs.DadkvsPaxos;
 import dadkvs.DadkvsPaxosServiceGrpc;
