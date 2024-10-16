@@ -6,7 +6,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
-
+import dadkvs.server.Paxos.*;
 import dadkvs.DadkvsPaxosServiceGrpc;
 import io.grpc.ManagedChannel;
 
@@ -34,7 +34,10 @@ public class DadkvsServerState {
     ArrayList<Integer>  localOrderList;
     int                 minLocalorder;
     // Class with handlers for Paxos execution
-    DadkvsServerPaxos   paxos;
+    DadkvsServerPaxosLeader leader;
+    DadkvsServerPaxosAcceptor acceptor;
+    DadkvsServerPaxosLearner learner;
+    HashMap<Integer, Pair> paxosLogs;
 
 
     public DadkvsServerState(int kv_size, int port, int myself, int servers,
@@ -60,9 +63,12 @@ public class DadkvsServerState {
         localOrderCounter = new AtomicInteger(0);
         localOrderList = new ArrayList<Integer>();
         minLocalorder = -1;
-
-        paxos = new DadkvsServerPaxos(0,this);
-
+        // Nao esta full corretor so deviamos criar as instancias de acordo 
+        //com a config ou podemos so fazer assim e menos elegante
+        leader = new DadkvsServerPaxosLeader(0,this);
+        acceptor = new DadkvsServerPaxosAcceptor(0,this);
+        learner = new DadkvsServerPaxosLearner(0,this);
+        paxosLogs = new HashMap<>();
         main_loop = new MainLoop(this);
         main_loop_worker = new Thread (main_loop);
         main_loop_worker.start();
@@ -108,7 +114,7 @@ public class DadkvsServerState {
                     System.out.println("[handleTRansaction] Im leader and starting paxos with localOrder_copy = " + localOrder_copy);
                     // We add learnCounter.size() because there could be Transactions that were already accepted in Paxos, but that haven't yet received
                     //  the 2nd LearnRequest, removed their learnCounter entry and, subsequently, incremented the nextSeqNum (retirei  + learnCounter.size())
-                    this.paxos.handleLeaderPaxos(nextSeqNumber, reqid);
+                    this.leader.handlePaxos(nextSeqNumber, reqid);
                 } else {
                     try { wait ();}
                     catch (InterruptedException e) {} // Ignore
@@ -209,6 +215,134 @@ public class DadkvsServerState {
         synchronized(this){
             notifyAll();
         }
+    }
+
+    public boolean isI_am_leader() {
+        return i_am_leader;
+    }
+
+    public void setI_am_leader(boolean i_am_leader) {
+        this.i_am_leader = i_am_leader;
+    }
+
+    public int getN_servers() {
+        return n_servers;
+    }
+
+    public int getMy_id() {
+        return my_id;
+    }
+
+    public void setMy_id(int my_id) {
+        this.my_id = my_id;
+    }
+
+    public ManagedChannel[] getServer_channels() {
+        return server_channels;
+    }
+
+    public void setServer_channels(ManagedChannel[] server_channels) {
+        this.server_channels = server_channels;
+    }
+
+    public DadkvsPaxosServiceGrpc.DadkvsPaxosServiceStub[] getAsync_stubs() {
+        return async_stubs;
+    }
+
+    public void setAsync_stubs(DadkvsPaxosServiceGrpc.DadkvsPaxosServiceStub[] async_stubs) {
+        this.async_stubs = async_stubs;
+    }
+
+    public int getDebug_mode() {
+        return debug_mode;
+    }
+
+    public void setDebug_mode(int debug_mode) {
+        this.debug_mode = debug_mode;
+    }
+
+    public boolean isFreezed() {
+        return isFreezed;
+    }
+
+    public void setFreezed(boolean freezed) {
+        isFreezed = freezed;
+    }
+
+    public boolean isDelayed() {
+        return isDelayed;
+    }
+
+    public void setDelayed(boolean delayed) {
+        isDelayed = delayed;
+    }
+
+    public int getNextSeqNumber() {
+        return nextSeqNumber;
+    }
+
+    public void setNextSeqNumber(int nextSeqNumber) {
+        this.nextSeqNumber = nextSeqNumber;
+    }
+
+    public HashMap<Integer, Pair> getLearnCounter() {
+        return learnCounter;
+    }
+
+    public void setLearnCounter(HashMap<Integer, Pair> learnCounter) {
+        this.learnCounter = learnCounter;
+    }
+
+    public AtomicInteger getLocalOrderCounter() {
+        return localOrderCounter;
+    }
+
+    public ArrayList<Integer> getLocalOrderList() {
+        return localOrderList;
+    }
+
+    public void setLocalOrderList(ArrayList<Integer> localOrderList) {
+        this.localOrderList = localOrderList;
+    }
+
+    public int getMinLocalorder() {
+        return minLocalorder;
+    }
+
+    public void setMinLocalorder(int minLocalorder) {
+        this.minLocalorder = minLocalorder;
+    }
+
+    public DadkvsServerPaxosLeader getLeader() {
+        return leader;
+    }
+
+    public void setLeader(DadkvsServerPaxosLeader leader) {
+        this.leader = leader;
+    }
+
+    public DadkvsServerPaxosAcceptor getAcceptor() {
+        return acceptor;
+    }
+
+    public void setAcceptor(DadkvsServerPaxosAcceptor acceptor) {
+        this.acceptor = acceptor;
+    }
+
+    public DadkvsServerPaxosLearner getLearner() {
+        return learner;
+    }
+
+    public void setLearner(DadkvsServerPaxosLearner learner) {
+        this.learner = learner;
+    }
+
+    public HashMap<Integer, Pair> getPaxosLogs() {
+        return paxosLogs;
+    }
+
+    public void setPaxosLogs(HashMap<Integer, Pair> paxosLogs) {
+        this.paxosLogs = paxosLogs;
     }
 
 }

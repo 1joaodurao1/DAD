@@ -24,7 +24,7 @@ class DadkvsServerPaxos {
 	HashMap<Integer, Pair> paxosLogs;
 
 	public DadkvsServerPaxos(int config, DadkvsServerState state) {
-		my_current_priority = state.my_id;
+		my_current_priority = state.getMy_id();
 		my_current_config = config;
 		server_state = state;
 		paxosLogs = new HashMap<>();
@@ -43,7 +43,7 @@ class DadkvsServerPaxos {
 			paxosLogs.get(p1seqNum).setNum2(p1priority);
 		}
 		// If I am leader, I don't accept any Prepare() from others
-		if (server_state.i_am_leader) {
+		if (server_state.isI_am_leader()) {
 			accepted = false;
 		} else {
 			accepted = true;

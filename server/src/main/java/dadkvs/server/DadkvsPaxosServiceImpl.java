@@ -37,7 +37,7 @@ public class DadkvsPaxosServiceImpl extends DadkvsPaxosServiceGrpc.DadkvsPaxosSe
 			this.server_state.insertDelay();
 		}
 
-        DadkvsPaxos.PhaseOneReply response = server_state.paxos.handlePhaseOneReply(request.getPhase1Config(),
+        DadkvsPaxos.PhaseOneReply response = server_state.acceptor.handlePhaseOneReply(request.getPhase1Config(),
                                                                                     request.getSeqNum(),
                                                                                     request.getPriority());
         responseObserver.onNext(response);
@@ -56,7 +56,7 @@ public class DadkvsPaxosServiceImpl extends DadkvsPaxosServiceGrpc.DadkvsPaxosSe
 			this.server_state.insertDelay();
 		}
 
-        DadkvsPaxos.PhaseTwoReply response = server_state.paxos.handlePhaseTwoReply(request.getPhase2Config(),
+        DadkvsPaxos.PhaseTwoReply response = server_state.acceptor.handlePhaseTwoReply(request.getPhase2Config(),
                                                                                     request.getSeqNum(),
                                                                                     request.getPhase2Value(),
                                                                                     request.getPriority());
@@ -79,7 +79,7 @@ public class DadkvsPaxosServiceImpl extends DadkvsPaxosServiceGrpc.DadkvsPaxosSe
         // Save reqId and seqNum of this LearnRequest in the LearnConter HashMap
         this.server_state.handleOrderID(request.getLearnvalue(), request.getSeqNum());
 
-        DadkvsPaxos.LearnReply response = server_state.paxos.handleLearnReply(request.getLearnconfig(),
+        DadkvsPaxos.LearnReply response = server_state.learner.handleLearnReply(request.getLearnconfig(),
                                                                                     request.getSeqNum(),
                                                                                     request.getLearnvalue(),
                                                                                     request.getPriority());

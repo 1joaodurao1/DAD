@@ -20,4 +20,14 @@ public class DadkvsServerPaxosLearner extends DadkvsServerPaxos {
 		super(config, state);
 	}
 
+	public DadkvsPaxos.LearnReply handleLearnReply(int lconfig, int lseqNum, int lvalue, int lpriority) {
+		boolean accepted = true;
+		DadkvsPaxos.LearnReply.Builder learn_reply = DadkvsPaxos.LearnReply.newBuilder();
+		learn_reply.setLearnconfig(Math.max(my_current_config, lconfig))
+				.setSeqNum(server_state.getNextSeqNumber()) // send your own nextSeqNumber (because: Why not??)
+				.setLearnaccepted(accepted);
+		return learn_reply.build();
+	}
+
+
 }
