@@ -12,4 +12,8 @@ import dadkvs.server.DadkvsServerPaxos;
 
 public class DadkvsServerPaxosLearner extends DadkvsServerPaxos {
 
+	public DadkvsServerPaxosLearner(int config, DadkvsServerState state) {
+		super(config, state);
+	}
+
 }

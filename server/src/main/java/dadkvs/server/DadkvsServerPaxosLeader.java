@@ -12,4 +12,8 @@ import dadkvs.server.DadkvsServerPaxos;
 
 public class DadkvsServerPaxosLeader extends DadkvsServerPaxos {
 
+	public DadkvsServerPaxosLeader(int config, DadkvsServerState state) {
+		super(config, state);
+	}
+
 }
