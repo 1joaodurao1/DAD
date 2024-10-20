@@ -155,9 +155,11 @@ public class DadkvsServerPaxosLeader extends DadkvsServerPaxos {
 			} else {
 				// HERE you try Phase One again
 				this.my_current_priority += this.server_state.getN_servers();
+				
 			}
 		} else {
 			System.err.println("ERROR: did not receive any phase2 responses");
 		}
+		
 	}
 }

@@ -23,7 +23,7 @@ public class DadkvsServerPaxosAcceptor extends DadkvsServerPaxos {
 	public DadkvsPaxos.PhaseOneReply handlePhaseOneReply(int p1config, int p1seqNum, int p1priority) {
 		boolean accepted;
 		DadkvsPaxos.PhaseOneReply.Builder phaseOne_reply = DadkvsPaxos.PhaseOneReply.newBuilder();
-
+		// sychronize this
 		// Add log to ArrayList if it doesn't exist
 		if (!server_state.getPaxosLogs().containsKey(p1seqNum)) {
 			server_state.getPaxosLogs().put(p1seqNum, new Pair(-1, p1priority));
@@ -55,7 +55,7 @@ public class DadkvsServerPaxosAcceptor extends DadkvsServerPaxos {
 	public DadkvsPaxos.PhaseTwoReply handlePhaseTwoReply(int p2config, int p2seqNum, int p2value, int p2priority) {
 		boolean accepted;
 		DadkvsPaxos.PhaseTwoReply.Builder phaseTwo_reply = DadkvsPaxos.PhaseTwoReply.newBuilder();
-
+		// sychronize this
 		// Add log to ArrayList if it doesn't exist
 		if (!server_state.getPaxosLogs().containsKey(p2seqNum)) {
 			server_state.getPaxosLogs().put(p2seqNum, new Pair(-1, p2priority));

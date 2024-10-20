@@ -63,8 +63,6 @@ public class DadkvsServerState {
         localOrderCounter = new AtomicInteger(0);
         localOrderList = new ArrayList<Integer>();
         minLocalorder = -1;
-        // Nao esta full corretor so deviamos criar as instancias de acordo 
-        //com a config ou podemos so fazer assim e menos elegante
         leader = new DadkvsServerPaxosLeader(0,this);
         acceptor = new DadkvsServerPaxosAcceptor(0,this);
         learner = new DadkvsServerPaxosLearner(0,this);
