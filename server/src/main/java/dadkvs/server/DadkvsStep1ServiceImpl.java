@@ -21,7 +21,7 @@ public class DadkvsStep1ServiceImpl extends DadkvsStep1ServiceGrpc.DadkvsStep1Se
 
 
 		// Call a function here that either executes in order the transactions it has, or saves the OrderList until it recieves the respective transactions
-		this.server_state.handleOrderID(request.getNextReqid(), request.getSeqNumber());
+		//[This function was deleted] this.server_state.handleOrderID(request.getNextReqid(), request.getSeqNumber());
 
 		DadkvsStep1.DefineOrderReply response = DadkvsStep1.DefineOrderReply.newBuilder().build();
 

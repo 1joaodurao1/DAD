@@ -74,6 +74,6 @@ public class DadkvsMainServiceImpl extends DadkvsMainServiceGrpc.DadkvsMainServi
 		responseObserver.onCompleted();
 
 		// Debug message
-		System.out.println("#---------- committx DONE ----------#");
+		System.out.println("#---------- committx nº" + server_state.getLearnCounter().get(reqid).getNum1() + " DONE ----------#");
     }
 }

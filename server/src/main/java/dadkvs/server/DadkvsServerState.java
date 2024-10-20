@@ -1,7 +1,6 @@
 package dadkvs.server;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Random;
@@ -72,22 +71,7 @@ public class DadkvsServerState {
         main_loop_worker.start();
     }
 
-    public synchronized void handleOrderID(int reqid, int seqNumber){
-        if (nextSeqNumber > seqNumber){
-            // This request has already been processed
-            System.out.println("[handleOrderID] Ignored: nextSeqNumber " + nextSeqNumber + " is HIGHER than the seqNumber received " + seqNumber);
-        } else {
-            if (learnCounter.containsKey(reqid)){
-                // Increment LearnRequest (Num2) counter in Pair<SeqNum, counter>
-                learnCounter.get(reqid).setNum2(learnCounter.get(reqid).getNum2() + 1);
-                System.out.println("[handleOrderID] Incremented HashMap entry of reqid " + reqid + " to " + learnCounter.get(reqid).getNum2());
-                notifyAll(); // To release the wait()s in handleTransaction
-            } else {
-                learnCounter.put(reqid, new Pair(seqNumber, 1));
-                System.out.println("[handleOrderID] Created HashMap entry of reqid " + reqid + " with the number 1 ");
-            }
-        }
-    }
+
 
     public boolean handleTransaction(int reqid, TransactionRecord record){
         int localOrder_copy = this.localOrderCounter.getAndIncrement();
@@ -104,8 +88,8 @@ public class DadkvsServerState {
                 System.out.println("[handleTRansaction] nextSeqNumber = " +  nextSeqNumber);
                 System.out.println("[handleTRansaction] localOrderList = " +  localOrderList);
                 if (learnCounter.containsKey(reqid) ){ // This "if" is to avoid NULL pointer exceptions
-                    System.out.println("[handleTRansaction]:SeqNumber of learnCounter " +learnCounter.get(reqid).getNum1());
-                    System.out.println("[handleTRansaction]:Number of Learn Requests " +learnCounter.get(reqid).getNum2());
+                    System.out.println("[handleTRansaction]:SeqNumber of learnCounter " + learnCounter.get(reqid).getNum1());
+                    System.out.println("[handleTRansaction]:Number of Learn Requests " + learnCounter.get(reqid).getNum2());
                 }
 
                 if (this.i_am_leader && this.minLocalorder == localOrder_copy){
@@ -129,7 +113,7 @@ public class DadkvsServerState {
                 }
             }
             boolean result = this.store.commit(record);
-            learnCounter.remove(reqid);
+            //[Going to remove this line for Step4] learnCounter.remove(reqid);
             nextSeqNumber++;
             notifyAll(); // Tell the next transaction to execute, if it's ready (i.e. received at least 2 LearnRequests)
             return result;
@@ -206,12 +190,6 @@ public class DadkvsServerState {
             this.minLocalorder = Collections.min(localOrderList);
         } else {
             this.minLocalorder = -1; // Default value when there is no transaction to execute
-        }
-    }
-
-    public void notifyEveryone(){
-        synchronized(this){
-            notifyAll();
         }
     }
 
@@ -343,4 +321,31 @@ public class DadkvsServerState {
         this.paxosLogs = paxosLogs;
     }
 
+    public synchronized void updateLearnCounter(int reqid, int seqNum){
+        if (!learnCounter.containsKey(reqid)) {
+			learnCounter.put(reqid, new Pair(seqNum, 1));
+		} else {
+			// Increment LearnRequest (Num2) counter in Pair<SeqNum, counter>
+            learnCounter.get(reqid).setNum2(learnCounter.get(reqid).getNum2() + 1);
+			notifyAll();
+		}
+    }
+
+    public boolean updatePaxosLogs(int seqNum, int priority){
+        // Add log to ArrayList if it doesn't exist
+        if (!paxosLogs.containsKey(seqNum)) {
+            paxosLogs.put(seqNum, new Pair(-1, priority));
+        }
+        // Update priority if incoming priority is higher
+        if (paxosLogs.get(seqNum).getNum2() <= priority) {
+            paxosLogs.get(seqNum).setNum2(priority);
+            return true; // TRUE means incoming priority is equal or higher
+        } else {
+            return false;
+        }
+    }
+
+    public void setPaxosLogsReqId(int seqNum, int reqid){
+        paxosLogs.get(seqNum).setNum1(reqid);
+    }
 }

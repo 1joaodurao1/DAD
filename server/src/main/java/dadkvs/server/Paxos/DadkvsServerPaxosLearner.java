@@ -5,14 +5,9 @@ import dadkvs.DadkvsPaxosServiceGrpc;
 import dadkvs.util.CollectorStreamObserver;
 import dadkvs.util.GenericResponseCollector;
 import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.HashMap;
 
 import dadkvs.server.*;
 
-import com.google.common.collect.ArrayListMultimap;
-
-import java.util.Collections;
 
 public class DadkvsServerPaxosLearner extends DadkvsServerPaxos {
 
@@ -20,11 +15,43 @@ public class DadkvsServerPaxosLearner extends DadkvsServerPaxos {
 		super(config, state);
 	}
 
-	public DadkvsPaxos.LearnReply handleLearnReply(int lconfig, int lseqNum, int lvalue, int lpriority) {
+	public void sendLearnRequests(int config, int seqNum, int reqid, int priority){
+		// SEND LEARN REQUEST
+		DadkvsPaxos.LearnRequest.Builder learnRequest = DadkvsPaxos.LearnRequest.newBuilder();
+		ArrayList<DadkvsPaxos.LearnReply> learn_responses = new ArrayList<>();
+		GenericResponseCollector<DadkvsPaxos.LearnReply> learn_collector = new GenericResponseCollector<>(learn_responses,
+				server_state.getN_servers());
+		learnRequest.setLearnconfig(config).setSeqNum(seqNum).setLearnvalue(reqid).setPriority(priority);
+
+		for (int i = 0; i < server_state.getN_servers(); i++) {
+			if (i != server_state.getMy_id()) {
+				CollectorStreamObserver<DadkvsPaxos.LearnReply> learn_observer = new CollectorStreamObserver<DadkvsPaxos.LearnReply>(
+						learn_collector);
+				server_state.getAsync_stubs()[i].learn(learnRequest.build(), learn_observer);
+			}
+		}
+
+		// RECEIVE LEARN REPLY
+		learn_collector.waitForTarget(1); // Don't care about the replies
+		if (learn_responses.size() >= 1) {
+			System.out.println("[sendLearnRequests] Sending learn SUCCESS: At least one LearnRequest has been Replied");
+		} else {
+			System.err.println("ERROR: did not receive any learn replies");
+		}
+	}
+
+	public DadkvsPaxos.LearnReply handleLearnRequest(int lconfig, int lseqNum, int lreqid, int lpriority) {
 		boolean accepted = true;
+		if (server_state.getNextSeqNumber() > lseqNum){
+            // This request has already been processed
+            System.out.println("\n[handleLearnRequest] Ignored: nextSeqNumber " + server_state.getNextSeqNumber() + " is HIGHER than the seqNumber received " + lseqNum);
+        } else {
+			server_state.updateLearnCounter(lreqid, lseqNum);
+        }
+		// The reply is useless, but Grpc needs it to work
 		DadkvsPaxos.LearnReply.Builder learn_reply = DadkvsPaxos.LearnReply.newBuilder();
 		learn_reply.setLearnconfig(Math.max(my_current_config, lconfig))
-				.setSeqNum(server_state.getNextSeqNumber()) // send your own nextSeqNumber (because: Why not??)
+				.setSeqNum(lseqNum)
 				.setLearnaccepted(accepted);
 		return learn_reply.build();
 	}
