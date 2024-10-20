@@ -16,6 +16,7 @@ message PhaseOneReply { // 2. Promise
   bool  accepted      = 3;
   int32 phase1value   = 4; // Value left by previous leader in the same consensus
   int32 priority      = 5;
+  bool  isDuplicated  = 6; // is value of phase2Req was already done on previous consensous
 }
 
 message PhaseTwoRequest { // 3. Accept
@@ -29,6 +30,7 @@ message PhaseTwoReply { // 4. Accepted
   int32 phase2config   = 1;
   int32 seqNum         = 2;
   bool  phase2accepted = 3;
+  bool  isDuplicated   = 4; // is value of phase2Req was already done on previous consensous
 }
 
 message LearnRequest { // Inform Learners of Accepted transaction
