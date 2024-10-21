@@ -2,9 +2,9 @@ package dadkvs.server;
 
 public class Triplet {
 
-    private int num1;
-    private int num2;
-    private int num3;
+    private int num1; // reqid
+    private int num2; // priority
+    private int num3; // config
 
 
     public Triplet(int num1 , int num2, int num3){

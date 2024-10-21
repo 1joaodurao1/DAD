@@ -30,13 +30,14 @@ public class DadkvsServerState {
     HashMap<Integer, Pair>  learnCounter;
     // Variables to control next transaction to propose (only relevant if I am leader)
     AtomicInteger       localOrderCounter;
+    AtomicInteger       nextSeqNumbertoPropose;
     ArrayList<Integer>  localOrderList;
     int                 minLocalorder;
     // Class with handlers for Paxos execution
     DadkvsServerPaxosLeader leader;
     DadkvsServerPaxosAcceptor acceptor;
     DadkvsServerPaxosLearner learner;
-    HashMap<Integer, Pair> paxosLogs;
+    HashMap<Integer, Triplet> paxosLogs;
 
 
     public DadkvsServerState(int kv_size, int port, int myself, int servers,
@@ -60,6 +61,7 @@ public class DadkvsServerState {
         learnCounter = new HashMap<>();
 
         localOrderCounter = new AtomicInteger(0);
+        nextSeqNumbertoPropose = new AtomicInteger(0);
         localOrderList = new ArrayList<Integer>();
         minLocalorder = -1;
         leader = new DadkvsServerPaxosLeader(0,this);
@@ -76,14 +78,14 @@ public class DadkvsServerState {
     public boolean handleTransaction(int reqid, TransactionRecord record){
         int localOrder_copy = this.localOrderCounter.getAndIncrement();
         localOrderList.add(localOrder_copy);
-        this.minLocalorder = Collections.min(localOrderList);
 
         synchronized(this){
             // Stay in this loop until you receive 2 LearnRequests for your transaction and the seqNum they have is the next one in line (nextSeqNumber)
             while (!learnCounter.containsKey(reqid) || !(learnCounter.get(reqid).getNum1() == nextSeqNumber && learnCounter.get(reqid).getNum2() >= 2)){
                 // Debug Messages
                 System.out.println("\n[handleTRansaction] i_am_leader = " +  this.i_am_leader);
-                System.out.println("[handleTRansaction] this.minLocalorder = " +  this.minLocalorder);
+                if (localOrderList.size() > 0)
+                    System.out.println("[handleTRansaction] min(LocalorderList) = " +  Collections.min(localOrderList));
                 System.out.println("[handleTRansaction] localOrder_copy = " +  localOrder_copy);
                 System.out.println("[handleTRansaction] nextSeqNumber = " +  nextSeqNumber);
                 System.out.println("[handleTRansaction] localOrderList = " +  localOrderList);
@@ -92,32 +94,40 @@ public class DadkvsServerState {
                     System.out.println("[handleTRansaction]:Number of Learn Requests " + learnCounter.get(reqid).getNum2());
                 }
 
-                if (this.i_am_leader && this.minLocalorder == localOrder_copy){
+                if (this.i_am_leader &&  isLeaderInConfig() && (localOrderList.size() > 0 && Collections.min(localOrderList) == localOrder_copy)){
                     System.out.println("[handleTRansaction] Im leader and starting paxos with localOrder_copy = " + localOrder_copy);
                     // We add learnCounter.size() because there could be Transactions that were already accepted in Paxos, but that haven't yet received
                     //  the 2nd LearnRequest, removed their learnCounter entry and, subsequently, incremented the nextSeqNum (retirei  + learnCounter.size())
-                    this.leader.handlePaxos(nextSeqNumber, reqid);
+                    this.leader.handlePaxos(nextSeqNumbertoPropose.getAndIncrement(), reqid , localOrder_copy);
                 } else {
                     try { wait ();}
                     catch (InterruptedException e) {} // Ignore
                 }
             }
             System.out.println("[handleTransaction] Im a learner and im going to commit with seqNumber = " + learnCounter.get(reqid).getNum1() + "and request id " + reqid);
-            if(localOrderList.contains(localOrder_copy)){
-                // If I was previously not leader and I became leader, I have to update the minLocalorder to propose the next Transaction in this LOCAL order
-                this.localOrderList.remove((Integer) this.minLocalorder);
-                if(localOrderList.size() > 0){
-                    this.minLocalorder = Collections.min(localOrderList);
-                } else {
-                    this.minLocalorder = -1; // Default value when there is no transaction to execute
+            this.syncRemoveMinLocalOrder(localOrder_copy);
+            boolean result = this.store.commit(record);
+            if (result){
+                if ( record.getPrepareKey() == 0) {
+                    System.out.println("[handleTransaction] Im a learner and im going to commit a reconfig to configuration " + record.getPrepareKey());
+                    learner.setMy_current_config(record.getPrepareKey());
+                    leader.setMy_current_config(record.getPrepareKey());
+                    acceptor.setMy_current_config(record.getPrepareKey());
+                    // If im leader and change config, but i belong to next config i continue being a leader, else i stop being a leader
+                    if ( i_am_leader && !isLeaderInConfig()){
+                        i_am_leader = false;
+                    }
                 }
             }
-            boolean result = this.store.commit(record);
             //[Going to remove this line for Step4] learnCounter.remove(reqid);
             nextSeqNumber++;
             notifyAll(); // Tell the next transaction to execute, if it's ready (i.e. received at least 2 LearnRequests)
             return result;
         }
+    }
+
+    public boolean isLeaderInConfig(){
+        return leader.getMy_current_config() <= my_id && my_id <= leader.getMy_current_config() + n_servers - 1;
     }
 
     public void server_exit(){
@@ -179,17 +189,6 @@ public class DadkvsServerState {
             default:
                 System.err.println("\n[handleDebug] ERROR: Default mode not known");
                 break;
-        }
-    }
-
-    public void removeAndUpdateLocalOrder(){
-        if(localOrderList.contains(this.minLocalorder)){
-            this.localOrderList.remove((Integer) this.minLocalorder );
-        }
-        if(localOrderList.size() > 0){
-            this.minLocalorder = Collections.min(localOrderList);
-        } else {
-            this.minLocalorder = -1; // Default value when there is no transaction to execute
         }
     }
 
@@ -281,14 +280,6 @@ public class DadkvsServerState {
         this.localOrderList = localOrderList;
     }
 
-    public int getMinLocalorder() {
-        return minLocalorder;
-    }
-
-    public void setMinLocalorder(int minLocalorder) {
-        this.minLocalorder = minLocalorder;
-    }
-
     public DadkvsServerPaxosLeader getLeader() {
         return leader;
     }
@@ -313,11 +304,11 @@ public class DadkvsServerState {
         this.learner = learner;
     }
 
-    public HashMap<Integer, Pair> getPaxosLogs() {
+    public HashMap<Integer, Triplet> getPaxosLogs() {
         return paxosLogs;
     }
 
-    public void setPaxosLogs(HashMap<Integer, Pair> paxosLogs) {
+    public void setPaxosLogs(HashMap<Integer, Triplet> paxosLogs) {
         this.paxosLogs = paxosLogs;
     }
 
@@ -331,21 +322,33 @@ public class DadkvsServerState {
 		}
     }
 
-    public boolean updatePaxosLogs(int seqNum, int priority){
+    public synchronized boolean updatePaxosLogs(int seqNum, int reqid, int priority, int config){
         // Add log to ArrayList if it doesn't exist
         if (!paxosLogs.containsKey(seqNum)) {
-            paxosLogs.put(seqNum, new Pair(-1, priority));
+            paxosLogs.put(seqNum, new Triplet(reqid, priority, config));
+            return true;
         }
         // Update priority if incoming priority is higher
-        if (paxosLogs.get(seqNum).getNum2() <= priority) {
+        if (paxosLogs.get(seqNum).getNum2() <= priority && paxosLogs.get(seqNum).getNum3() == config) {
+            paxosLogs.get(seqNum).setNum1(reqid);
             paxosLogs.get(seqNum).setNum2(priority);
-            return true; // TRUE means incoming priority is equal or higher
+            return true; // TRUE means incoming priority is equal or higher and config is correct
         } else {
             return false;
         }
     }
 
-    public void setPaxosLogsReqId(int seqNum, int reqid){
-        paxosLogs.get(seqNum).setNum1(reqid);
+    public synchronized void notifyAllServerState(){
+        notifyAll();
+    }
+
+    public synchronized void syncRemoveMinLocalOrder(int valueToRemove){
+        if(localOrderList.contains(valueToRemove)){
+            this.localOrderList.remove(valueToRemove);
+        }
+    }
+
+    public synchronized void syncAddLocalOrder(int valueToAdd){
+        localOrderList.add(valueToAdd);
     }
 }

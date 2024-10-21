@@ -21,14 +21,13 @@ public class DadkvsServerPaxosAcceptor extends DadkvsServerPaxos {
 		accepted = !server_state.isI_am_leader();
 
 		// ALL accesses to paxosLogs need to be syncronized (for MultiPaxos)
-		synchronized(this){
-			server_state.updatePaxosLogs(p1seqNum, p1priority);
-			phaseOne_reply.setPhase1Config(Math.max(my_current_config, p1config)) // TODO: Change this for Step4
-					.setSeqNum(p1seqNum)
-					.setAccepted(accepted)
-					.setPhase1Value(server_state.getPaxosLogs().get(p1seqNum).getNum1()) // Send value of the previous leader
-					.setPriority(server_state.getPaxosLogs().get(p1seqNum).getNum2()); // Send highest priority received
-		}
+		server_state.updatePaxosLogs(p1seqNum, server_state.getPaxosLogs().get(p1seqNum).getNum1(), p1priority, p1config);
+		phaseOne_reply.setPhase1Config(server_state.getPaxosLogs()) // TODO: Change this for Step4
+				.setSeqNum(p1seqNum)
+				.setAccepted(accepted)
+				.setPhase1Value(server_state.getPaxosLogs().get(p1seqNum).getNum1()) // Send value of the previous leader
+				.setPriority(server_state.getPaxosLogs().get(p1seqNum).getNum2()); // Send highest priority received
+
 		// Debug messages
 		System.out.println("\n[handlePhaseOneRequest] Reply.phase1Config = " + phaseOne_reply.getPhase1Config());
 		System.out.println("[handlePhaseOneRequest] Reply.seqNum = " + phaseOne_reply.getSeqNum());
@@ -39,26 +38,31 @@ public class DadkvsServerPaxosAcceptor extends DadkvsServerPaxos {
 	}
 
 	public DadkvsPaxos.PhaseTwoReply handlePhaseTwoRequest(int p2config, int p2seqNum, int p2value, int p2priority) {
-		boolean accepted;
+		boolean accepted = false, duplicated;
 		DadkvsPaxos.PhaseTwoReply.Builder phaseTwo_reply = DadkvsPaxos.PhaseTwoReply.newBuilder();
 
-		// ALL accesses to paxosLogs need to be syncronized (for MultiPaxos)
-		synchronized(this){
+		if ( server_state.getLearnCounter().containsKey(p2value) && server_state.getLearnCounter().get(p2value).getNum1() != p2seqNum){
+			duplicated = true;
+		} else {
+			duplicated = false;
+			// ALL accesses to paxosLogs are syncronized (for MultiPaxos)
 			// If the incoming p2priority is equal or higher, it means the PhaseTwoRequest was accepted
-			accepted = server_state.updatePaxosLogs(p2seqNum, p2priority);
-		}
-		if (accepted){
-			// Inform other servers of PAXOS consensus result
-			server_state.getLearner().sendLearnRequests(my_current_config, p2seqNum, p2value, my_current_priority);
+			accepted = server_state.updatePaxosLogs(p2seqNum, p2value ,p2priority);
 
-			// Since the p2value was already accepted in Paxos, we assume this server
-			// receives their own LearnRequest
-			server_state.updateLearnCounter(p2value, p2seqNum);
+			if (accepted) {
+				// Inform other servers of PAXOS consensus result
+				server_state.getLearner().sendLearnRequests(my_current_config, p2seqNum, p2value, my_current_priority);
+
+				// Since the p2value was already accepted in Paxos, we assume this server
+				// receives their own LearnRequest
+				server_state.updateLearnCounter(p2value, p2seqNum);
+			}
 		}
 
 		phaseTwo_reply.setPhase2Config(Math.max(my_current_config, p2config)) // TODO: Change this for Step4
 				.setSeqNum(p2seqNum)
-				.setPhase2Accepted(accepted);
+				.setPhase2Accepted(accepted)
+				.setIsDuplicated(duplicated);
 		// Debug messages
 		System.out.println("\n[handlePhaseTwoRequest] Reply.phase2Config = " + phaseTwo_reply.getPhase2Config());
 		System.out.println("[handlePhaseTwoRequest] Reply.seqNum = " + phaseTwo_reply.getSeqNum());

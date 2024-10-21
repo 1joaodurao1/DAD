@@ -25,4 +25,11 @@ class DadkvsServerPaxos {
 		server_state = state;
 	}
 
+	public int getMy_current_config() {
+		return my_current_config;
+	}
+	public void setMy_current_config(int my_current_config) {
+		this.my_current_config = my_current_config;
+	}
+
 }
