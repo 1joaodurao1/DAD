@@ -3,6 +3,7 @@ package dadkvs.server;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 import dadkvs.server.Paxos.*;
@@ -32,12 +33,11 @@ public class DadkvsServerState {
     AtomicInteger       localOrderCounter;
     AtomicInteger       nextSeqNumbertoPropose;
     ArrayList<Integer>  localOrderList;
-    int                 minLocalorder;
     // Class with handlers for Paxos execution
     DadkvsServerPaxosLeader leader;
     DadkvsServerPaxosAcceptor acceptor;
     DadkvsServerPaxosLearner learner;
-    HashMap<Integer, Triplet> paxosLogs;
+    Map<Integer, Triplet> paxosLogs;
 
 
     public DadkvsServerState(int kv_size, int port, int myself, int servers,
@@ -63,11 +63,12 @@ public class DadkvsServerState {
         localOrderCounter = new AtomicInteger(0);
         nextSeqNumbertoPropose = new AtomicInteger(0);
         localOrderList = new ArrayList<Integer>();
-        minLocalorder = -1;
+
         leader = new DadkvsServerPaxosLeader(0,this);
         acceptor = new DadkvsServerPaxosAcceptor(0,this);
         learner = new DadkvsServerPaxosLearner(0,this);
-        paxosLogs = new HashMap<>();
+        paxosLogs = Collections.synchronizedMap(new HashMap<>());
+
         main_loop = new MainLoop(this);
         main_loop_worker = new Thread (main_loop);
         main_loop_worker.start();
@@ -94,7 +95,7 @@ public class DadkvsServerState {
                     System.out.println("[handleTRansaction]:Number of Learn Requests " + learnCounter.get(reqid).getNum2());
                 }
 
-                if (this.i_am_leader &&  isLeaderInConfig() && (localOrderList.size() > 0 && Collections.min(localOrderList) == localOrder_copy)){
+                if (this.i_am_leader && isLeaderInConfig() && (localOrderList.size() > 0 && Collections.min(localOrderList) == localOrder_copy)){
                     System.out.println("[handleTRansaction] Im leader and starting paxos with localOrder_copy = " + localOrder_copy);
                     // We add learnCounter.size() because there could be Transactions that were already accepted in Paxos, but that haven't yet received
                     //  the 2nd LearnRequest, removed their learnCounter entry and, subsequently, incremented the nextSeqNum (retirei  + learnCounter.size())
@@ -304,11 +305,11 @@ public class DadkvsServerState {
         this.learner = learner;
     }
 
-    public HashMap<Integer, Triplet> getPaxosLogs() {
+    public Map<Integer, Triplet> getPaxosLogs() {
         return paxosLogs;
     }
 
-    public void setPaxosLogs(HashMap<Integer, Triplet> paxosLogs) {
+    public void setPaxosLogs(Map<Integer, Triplet> paxosLogs) {
         this.paxosLogs = paxosLogs;
     }
 
@@ -322,29 +323,27 @@ public class DadkvsServerState {
 		}
     }
 
-    public synchronized boolean updatePaxosLogs(int seqNum, int reqid, int priority, int config){
-        // Add log to ArrayList if it doesn't exist
-        if (!paxosLogs.containsKey(seqNum)) {
-            paxosLogs.put(seqNum, new Triplet(reqid, priority, config));
-            return true;
-        }
-        // Update priority if incoming priority is higher
-        if (paxosLogs.get(seqNum).getNum2() <= priority && paxosLogs.get(seqNum).getNum3() == config) {
-            paxosLogs.get(seqNum).setNum1(reqid);
-            paxosLogs.get(seqNum).setNum2(priority);
-            return true; // TRUE means incoming priority is equal or higher and config is correct
-        } else {
-            return false;
-        }
-    }
+//    public synchronized void updatePaxosLogs(int seqNum, int reqid, int priority, int config){
+//        // Add log to ArrayList if it doesn't exist
+//        if (!paxosLogs.containsKey(seqNum)) {
+//            paxosLogs.put(seqNum, new Triplet(reqid, priority, config));
+//        }
+//        // Update priority if incoming priority is higher
+//        if (paxosLogs.get(seqNum).getNum2() <= priority && paxosLogs.get(seqNum).getNum3() == config) {
+//            if (paxosLogs.get(seqNum).getNum1() != 1){ // "-1" means not defined. reqid is only defined once in each paxosLog
+//                paxosLogs.get(seqNum).setNum1(reqid);
+//            }
+//            paxosLogs.get(seqNum).setNum2(priority);
+//        }
+//    }
 
     public synchronized void notifyAllServerState(){
         notifyAll();
     }
 
     public synchronized void syncRemoveMinLocalOrder(int valueToRemove){
-        if(localOrderList.contains(valueToRemove)){
-            this.localOrderList.remove(valueToRemove);
+        if(localOrderList.contains((Integer) valueToRemove)){
+            this.localOrderList.remove((Integer) valueToRemove);
         }
     }
 

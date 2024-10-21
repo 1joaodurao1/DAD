@@ -16,45 +16,57 @@ public class DadkvsServerPaxosLeader extends DadkvsServerPaxos {
 	}
 
 	public void handlePaxos(int seqNum, int reqid , int localOrder_copy) {
-
+		int configLog = my_current_config, reqidToPropose = reqid, phase2result = 0;
 		// Delete local order copy from localOrderList to allow next transaction in multi paxos to start
 		server_state.syncRemoveMinLocalOrder(localOrder_copy);
 		server_state.notifyAllServerState();
 
-		// SAVE LOG of this Consensus
-		server_state.getPaxosLogs().put(seqNum, new Pair(reqid, my_current_priority));
+		// SAVE LOG of this Consensus (reqid is "-1" because the value isn't accepted yet)
+		synchronized(server_state.getPaxosLogs()){
+			server_state.getPaxosLogs().put(seqNum, new Triplet(-1, my_current_priority, my_current_config));
+		}
 
 		// DO CONSENSUS number seqNum
 		while (server_state.isI_am_leader()) {
-			reqid = handlePhase1(seqNum, reqid, localOrder_copy);
-
-			if(handlePhase2(seqNum, reqid, localOrder_copy)){ // If this is false you have to try phaseOne again
-				break; // SUCCESS
+			synchronized(server_state.getPaxosLogs()){
+				configLog = server_state.getPaxosLogs().get(seqNum).getNum3();
 			}
+			reqidToPropose = handlePhase1(seqNum, reqidToPropose, localOrder_copy, configLog);
+
+			phase2result = handlePhase2(seqNum, reqidToPropose, localOrder_copy, configLog); // If this is false you have to try phaseOne again
+			if (phase2result == 0){
+				break; // SUCCESS
+			} else if (phase2result == 2){
+				break; // DUPLICATE
+			}
+		}
+
+		if (phase2result == 2){
+			return; // It means the value was already decided in a consensus, now you wait for the learnRequests for it
 		}
 
 		// Since the reqid was already accepted in Paxos, we assume the leader receives
 		// their own LearnRequest
-		server_state.updateLearnCounter(reqid, seqNum);
+		server_state.updateLearnCounter(reqidToPropose, seqNum);
 
 		// Inform other servers of PAXOS consensus result
-		server_state.getLearner().sendLearnRequests(my_current_config, seqNum, reqid, my_current_priority);
+		server_state.getLearner().sendLearnRequests(configLog, seqNum, reqidToPropose, my_current_priority);
 	}
 
-	public int handlePhase1(int seqNum, int reqid , int localOrder_copy) {
+	public int handlePhase1(int seqNum, int reqid, int localOrder_copy, int config) {
 		DadkvsPaxos.PhaseOneRequest.Builder phaseOneRequest = DadkvsPaxos.PhaseOneRequest.newBuilder();
 		while (server_state.isI_am_leader() && server_state.isLeaderInConfig()) {
 			// SEND PHASE ONE REQUEST (Prepare)
 			ArrayList<DadkvsPaxos.PhaseOneReply> phaseOne_responses = new ArrayList<>();
 			GenericResponseCollector<DadkvsPaxos.PhaseOneReply> phaseOne_collector = new GenericResponseCollector<>(
 					phaseOne_responses, numPaxosServers);
-			phaseOneRequest.setPhase1Config(my_current_config).setSeqNum(seqNum).setPriority(my_current_priority);
+			phaseOneRequest.setPhase1Config(config).setSeqNum(seqNum).setPriority(my_current_priority);
 			// Debug messages
 			System.out.println("\n[handlePhase1] Request1.phase1Config = " + phaseOneRequest.getPhase1Config());
 			System.out.println("[handlePhase1] Request1.seqNum = " + phaseOneRequest.getSeqNum());
 			System.out.println("[handlePhase1] Request1.priority = " + phaseOneRequest.getPriority());
 
-			for (int i = my_current_config; i < numPaxosServers + my_current_config; i++) {
+			for (int i = config; i < numPaxosServers + config; i++) {
 				if (i != server_state.getMy_id()) {
 					CollectorStreamObserver<DadkvsPaxos.PhaseOneReply> phaseOne_observer = new CollectorStreamObserver<DadkvsPaxos.PhaseOneReply>(
 							phaseOne_collector);
@@ -68,6 +80,7 @@ public class DadkvsServerPaxosLeader extends DadkvsServerPaxos {
 				Iterator<DadkvsPaxos.PhaseOneReply> phaseOne_iterator = phaseOne_responses.iterator();
 				DadkvsPaxos.PhaseOneReply phaseOne_reply = phaseOne_iterator.next();
 
+
 				// Check seqNum value
 				if (phaseOne_reply.getSeqNum() != seqNum) {
 					System.err.println("[handlePhase1] Reply1 - ERROR: Should not have received a different seqNumber!");
@@ -77,15 +90,28 @@ public class DadkvsServerPaxosLeader extends DadkvsServerPaxos {
 					if (phaseOne_reply.getPhase1Value() != -1) { // "-1" means empty
 						// You have to adopt the value of the previous leader, if he left any value
 						reqid = phaseOne_reply.getPhase1Value();
+
+						// Add local_order_copy back to localOrderList because in this consensus you're going to re-propose an old value you found in an Acceptor
+						server_state.syncAddLocalOrder(localOrder_copy);
 					}
-					server_state.updatePaxosLogs(seqNum, reqid, this.my_current_priority, this.my_current_config);
+					synchronized(server_state.getPaxosLogs()){ // Update reqid
+						server_state.getPaxosLogs().get(seqNum).setNum1(reqid);
+					}
+
+					// Check config value
+					if (phaseOne_reply.getPhase1Config() != config) {
+						synchronized(server_state.getPaxosLogs()){ // Update config
+							server_state.getPaxosLogs().get(seqNum).setNum3(phaseOne_reply.getPhase1Config());
+						}
+						continue; // (HERE you try phase 1 again with correct config)
+					}
 					break; // HERE YOU CONTINUE TO PHASE TWO
 				} else {
-					// HERE you try Phase One again (with a higher priority)
 					this.my_current_priority += this.server_state.getN_servers();
-					// add local_order_copy to localOrderList beacuse the current paxos executing is doing a diff reqID
-					server_state.syncAddLocalOrder(localOrder_copy);
-					server_state.updatePaxosLogs(seqNum, reqid, this.my_current_priority , phaseOne_reply.getPhase1Config());
+					synchronized(server_state.getPaxosLogs()){  // Update priority
+						server_state.getPaxosLogs().get(seqNum).setNum2(this.my_current_priority);
+					}
+					// HERE you try Phase One again (with a higher priority)
 				}
 				// Don't check priority, because "accepted" value already informs us of who has
 				// the higher priority
@@ -97,13 +123,13 @@ public class DadkvsServerPaxosLeader extends DadkvsServerPaxos {
 		return reqid; // Could have been changed, so we need to give this value to phase 2
 	}
 
-	public boolean handlePhase2(int seqNum, int reqid , int localOrder_copy) {
+	public int handlePhase2(int seqNum, int reqid , int localOrder_copy, int config) {
 		// SEND PHASE TWO REQUEST (Accept)
 		DadkvsPaxos.PhaseTwoRequest.Builder phaseTwoRequest = DadkvsPaxos.PhaseTwoRequest.newBuilder();
 		ArrayList<DadkvsPaxos.PhaseTwoReply> phaseTwo_responses = new ArrayList<>();
 		GenericResponseCollector<DadkvsPaxos.PhaseTwoReply> phaseTwo_collector = new GenericResponseCollector<>(
 				phaseTwo_responses, numPaxosServers);
-		phaseTwoRequest.setPhase2Config(my_current_config).setSeqNum(seqNum).setPhase2Value(reqid)
+		phaseTwoRequest.setPhase2Config(config).setSeqNum(seqNum).setPhase2Value(reqid)
 				.setPriority(my_current_priority);
 		// Debug messages
 		System.out.println("\n[handlePhase2] Request2.phase1Config = " + phaseTwoRequest.getPhase2Config());
@@ -111,7 +137,7 @@ public class DadkvsServerPaxosLeader extends DadkvsServerPaxos {
 		System.out.println("[handlePhase2] Request2.phase2Value = " + phaseTwoRequest.getPhase2Value());
 		System.out.println("[handlePhase2] Request2.priority = " + phaseTwoRequest.getPriority());
 
-		for (int i = my_current_config; i < numPaxosServers + my_current_config; i++) {
+		for (int i = config; i < numPaxosServers + config; i++) {
 			if (i != server_state.getMy_id()) {
 				CollectorStreamObserver<DadkvsPaxos.PhaseTwoReply> phaseTwo_observer = new CollectorStreamObserver<DadkvsPaxos.PhaseTwoReply>(
 						phaseTwo_collector);
@@ -129,18 +155,27 @@ public class DadkvsServerPaxosLeader extends DadkvsServerPaxos {
 			if (phaseTwo_reply.getSeqNum() != seqNum) {
 				System.err.println("[handlePhase2] Reply2 - ERROR: Should not have received a different seqNumber!");
 			}
+			// Check config value
+			if(phaseTwo_reply.getPhase2Config() != config){
+				synchronized(server_state.getPaxosLogs()){ // Update config
+					server_state.getPaxosLogs().get(seqNum).setNum3(phaseTwo_reply.getPhase2Config());
+				}
+				return 1; // Try Phase One again with correct config
+			}
 			// Check accepted value
 			if (phaseTwo_reply.getPhase2Accepted()) {
-				return true; // SUCCESS
+				return 0; // SUCCESS
 			} else {
 				// HERE you try Phase One again
 				this.my_current_priority += this.server_state.getN_servers();
-				// add local_order_copy to localOrderList beacuse the current paxos executing is doing a diff reqID
-				server_state.syncAddLocalOrder(localOrder_copy);
+				// Check duplicate value
+				if (phaseTwo_reply.getIsDuplicated()){
+					return 2; // Stop this Paxos
+				}
 			}
 		} else {
 			System.err.println("ERROR: did not receive any phase2 responses");
 		}
-		return false; // Try Phase One again
+		return 1; // Try Phase One again
 	}
 }
