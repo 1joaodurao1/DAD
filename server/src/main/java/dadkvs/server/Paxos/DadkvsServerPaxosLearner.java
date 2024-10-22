@@ -48,6 +48,11 @@ public class DadkvsServerPaxosLearner extends DadkvsServerPaxos {
         } else {
 			server_state.updateLearnCounter(lreqid, lseqNum);
         }
+		synchronized(server_state.getPaxosLogs()){
+			if(!server_state.getPaxosLogs().containsKey(lseqNum)){
+				server_state.getPaxosLogs().put(lseqNum, new Triplet(lreqid, lpriority, lconfig));
+			}
+		}
 		// The reply is useless, but Grpc needs it to work
 		DadkvsPaxos.LearnReply.Builder learn_reply = DadkvsPaxos.LearnReply.newBuilder();
 		learn_reply.setLearnconfig(Math.max(my_current_config, lconfig))
