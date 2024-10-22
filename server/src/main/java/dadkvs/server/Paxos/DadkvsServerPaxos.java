@@ -16,7 +16,7 @@ class DadkvsServerPaxos {
 	int my_current_config;
 	int my_current_priority;
 	DadkvsServerState server_state;
-	final int numPaxosServers = 3;
+	public final int numPaxosServers = 3;
 
 
 	public DadkvsServerPaxos(int config, DadkvsServerState state) {

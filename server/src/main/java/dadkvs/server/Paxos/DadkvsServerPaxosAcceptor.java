@@ -60,15 +60,23 @@ public class DadkvsServerPaxosAcceptor extends DadkvsServerPaxos {
 				// Add log to Map if it doesn't exist
 				if (!server_state.getPaxosLogs().containsKey(p2seqNum)){
 					server_state.getPaxosLogs().put(p2seqNum, new Triplet(-1, p2priority, p2config));
+
+					if (getMy_current_config() > p2config){
+						p2config = getMy_current_config();
+					} else {
+						accepted = true; // There was no previous Log and the config is >= than mine
+					}
+				} else {
+					// Save p2value (reqid) if incoming priority is higher
+					if (server_state.getPaxosLogs().get(p2seqNum).getNum2() <= p2priority){
+						server_state.getPaxosLogs().get(p2seqNum).setNum1(p2value);
+						accepted = true;
+					}
+					p2config = server_state.getPaxosLogs().get(p2seqNum).getNum3(); // Send config of first value accepted
 				}
-				// Save p2value (reqid) if incoming priority is higher
-				if (server_state.getPaxosLogs().get(p2seqNum).getNum2() <= p2priority){
-					server_state.getPaxosLogs().get(p2seqNum).setNum1(p2value);
-					accepted = true;
-				}
-				p2config = server_state.getPaxosLogs().get(p2seqNum).getNum3(); // Send config of first value accepted
 			}
 		}
+
 
 		if (!duplicated && accepted) {
 			// Inform other servers of PAXOS consensus result
