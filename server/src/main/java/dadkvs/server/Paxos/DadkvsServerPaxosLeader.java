@@ -60,7 +60,6 @@ public class DadkvsServerPaxosLeader extends DadkvsServerPaxos {
 
 	public int handlePhase1(int seqNum, int reqid, int localOrder_copy, boolean isNewLeader) {
 		int config;
-		DadkvsPaxos.PhaseOneRequest.Builder phaseOneRequest = DadkvsPaxos.PhaseOneRequest.newBuilder();
 		while (server_state.isI_am_leader() && server_state.isLeaderInConfig()) {
 			synchronized(server_state.getPaxosLogs()){
 				config = server_state.getPaxosLogs().get(seqNum).getNum3(); // Update config in case the log has changed
