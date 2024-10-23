@@ -85,6 +85,7 @@ public class DadkvsServerState {
             while (!learnCounter.containsKey(reqid) || !(learnCounter.get(reqid).getNum1() == nextSeqNumber && learnCounter.get(reqid).getNum2() >= 2)){
                 // Debug Messages
                 System.out.println("\n[handleTRansaction] i_am_leader = " +  this.i_am_leader);
+                System.out.println("\n[handleTRansaction] config = " +  this.leader.getMy_current_config());
                 if (localOrderList.size() > 0)
                     System.out.println("[handleTRansaction] min(LocalorderList) = " +  minLocalorder(localOrderList));
                 System.out.println("[handleTRansaction] localOrder_copy = " +  localOrder_copy);
@@ -110,14 +111,10 @@ public class DadkvsServerState {
             boolean result = this.store.commit(record);
             if (result){
                 if ( record.getPrepareKey() == 0) {
-                    System.out.println("[handleTransaction] Im a learner and im going to commit a reconfig to configuration " + record.getPrepareKey());
-                    learner.setMy_current_config(record.getPrepareKey());
-                    leader.setMy_current_config(record.getPrepareKey());
-                    acceptor.setMy_current_config(record.getPrepareKey());
-                    // If im leader and change config, but i belong to next config i continue being a leader, else i stop being a leader
-                    if (i_am_leader && !isLeaderInConfig()){
-                        i_am_leader = false;
-                    }
+                    System.out.println("[handleTransaction] Im a learner and im going to commit a reconfig to configuration " + record.getPrepareValue());
+                    learner.setMy_current_config(record.getPrepareValue());
+                    leader.setMy_current_config(record.getPrepareValue());
+                    acceptor.setMy_current_config(record.getPrepareValue());
                 }
             }
             //[Going to remove this line for Step4] learnCounter.remove(reqid);
@@ -177,6 +174,7 @@ public class DadkvsServerState {
                 break;
             case 3:
                 this.isFreezed = false;
+                if ( i_am_leader) this.leader.handleUpdate(nextSeqNumber);
                 synchronized(this){
                     notifyAll();
                 }

@@ -15,6 +15,31 @@ public class DadkvsServerPaxosLeader extends DadkvsServerPaxos {
 		super(config, state);
 	}
 
+
+	public void handleUpdate(int seqNum){
+		
+		boolean continueLoop = true;
+		while( continueLoop ){
+			for ( int i = seqNum; i < seqNum + 10 ; i++){
+				synchronized(server_state.getPaxosLogs()){
+					if (!server_state.getPaxosLogs().containsKey(i))
+						server_state.getPaxosLogs().put(i, new Triplet(-1, my_current_priority, my_current_config));
+				}
+				int reqid = handlePhase1(i, -1, -1, true);
+				System.out.println("[handleUpdate] Im updating now for seqNum: " + i + "and found reqID: " + reqid);
+				if (reqid == -1){
+					// OUTSIDE CONFIG , act as learner or found empty consensus slot , leader can start proposing new values
+					continueLoop = false;
+					break; 
+				}
+				int phase2result = handlePhase2(i, reqid, -1);
+				if ( phase2result == 0 ) server_state.removeByReqidLocalOrder(reqid);
+			}
+			seqNum += 10;
+		}
+		System.out.println("[handleUpdate] Finish updating in: " + seqNum);
+	}
+
 	public void handlePaxos(int seqNum, int reqid , int localOrder_copy) {
 		int configLog = my_current_config, reqidToPropose = reqid, phase2result = 0;
 		// Delete local order copy from localOrderList to allow next transaction in multi paxos to start
@@ -37,8 +62,6 @@ public class DadkvsServerPaxosLeader extends DadkvsServerPaxos {
 			phase2result = handlePhase2(seqNum, reqidToPropose, localOrder_copy); // If this is 1 you have to try phaseOne again
 			if (phase2result == 0){
 				break; // SUCCESS
-			} else if (phase2result == 2){
-				break; // DUPLICATE
 			} else if (phase2result == -1){
 				break; // OUTSIDE CONFIG
 			}
@@ -54,13 +77,18 @@ public class DadkvsServerPaxosLeader extends DadkvsServerPaxos {
 		// their own LearnRequest
 		server_state.updateLearnCounter(reqidToPropose, seqNum);
 
+		synchronized(server_state.getPaxosLogs()){
+			configLog = server_state.getPaxosLogs().get(seqNum).getNum3();
+			my_current_priority = server_state.getPaxosLogs().get(seqNum).getNum2();
+		}
+
 		// Inform other servers of PAXOS consensus result
 		server_state.getLearner().sendLearnRequests(configLog, seqNum, reqidToPropose, my_current_priority);
 	}
 
 	public int handlePhase1(int seqNum, int reqid, int localOrder_copy, boolean isNewLeader) {
 		int config;
-		while (server_state.isI_am_leader() && server_state.isLeaderInConfig()) {
+		while ( (server_state.isI_am_leader() && server_state.isLeaderInConfig()) || isNewLeader) {
 			synchronized(server_state.getPaxosLogs()){
 				config = server_state.getPaxosLogs().get(seqNum).getNum3(); // Update config in case the log has changed
 				// Check if I'm in the config of this particular Paxos
@@ -79,7 +107,8 @@ public class DadkvsServerPaxosLeader extends DadkvsServerPaxos {
 			if (phaseOne_reply.getPhase1Value() != -1) { // PREVIOUS VALUE FOUND
 				reqid = phaseOne_reply.getPhase1Value();
 				// Add local_order_copy back to localOrderList because in this consensus you're going to re-propose an old value you found in an Acceptor
-				server_state.addLocalOrder(localOrder_copy, reqid);
+				if ( !isNewLeader )
+					server_state.addLocalOrder(localOrder_copy, reqid);
 				synchronized(server_state.getPaxosLogs()){ // Update reqid
 					server_state.getPaxosLogs().get(seqNum).setNum1(reqid);
 				}
@@ -89,6 +118,7 @@ public class DadkvsServerPaxosLeader extends DadkvsServerPaxos {
 				synchronized(server_state.getPaxosLogs()){ // Update config
 					server_state.getPaxosLogs().get(seqNum).setNum3(phaseOne_reply.getPhase1Config());
 				}
+				continue; // Try Phase One again with correct config
 			}
 			// Check accepted value
 			if (!phaseOne_reply.getAccepted()) { // IF REJECTED
@@ -159,9 +189,6 @@ public class DadkvsServerPaxosLeader extends DadkvsServerPaxos {
 				// HERE you try Phase One again
 				this.my_current_priority += this.server_state.getN_servers();
 				// Check duplicate value
-				if (phaseTwo_reply.getIsDuplicated()){
-					return 2; // Stop this Paxos
-				}
 			}
 		} else {
 			System.err.println("ERROR: did not receive any phase2 responses");

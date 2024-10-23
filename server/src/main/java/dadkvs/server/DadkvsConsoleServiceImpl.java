@@ -19,6 +19,7 @@ public class DadkvsConsoleServiceImpl extends DadkvsConsoleServiceGrpc.DadkvsCon
 		// for debug purposes
 		System.out.println(request);
 
+		this.server_state.leader.handleUpdate(this.server_state.nextSeqNumber);
 		boolean response_value = true;
 		this.server_state.i_am_leader = request.getIsleader();
 
@@ -26,6 +27,8 @@ public class DadkvsConsoleServiceImpl extends DadkvsConsoleServiceGrpc.DadkvsCon
 		System.out.println("I am the leader = " + this.server_state.i_am_leader );
 		
 		this.server_state.nextSeqNumbertoPropose.set(this.server_state.nextSeqNumber);
+
+		this.server_state.notifyAllServerState();
 
 		this.server_state.main_loop.wakeup();
 

@@ -53,32 +53,30 @@ public class DadkvsServerPaxosAcceptor extends DadkvsServerPaxos {
 		boolean accepted = false, duplicated = false;
 		DadkvsPaxos.PhaseTwoReply.Builder phaseTwo_reply = DadkvsPaxos.PhaseTwoReply.newBuilder();
 
-		if (server_state.getLearnCounter().containsKey(p2value) && server_state.getLearnCounter().get(p2value).getNum1() != p2seqNum){
-			duplicated = true; // In this case, the leader has to stop proposing this value
-		} else {
-			synchronized(server_state.getPaxosLogs()){
-				// Add log to Map if it doesn't exist
-				if (!server_state.getPaxosLogs().containsKey(p2seqNum)){
-					server_state.getPaxosLogs().put(p2seqNum, new Triplet(-1, p2priority, p2config));
+	
+		synchronized(server_state.getPaxosLogs()){
+			// Add log to Map if it doesn't exist
+			if (!server_state.getPaxosLogs().containsKey(p2seqNum)){
+				server_state.getPaxosLogs().put(p2seqNum, new Triplet(-1, p2priority, p2config));
 
-					if (getMy_current_config() > p2config){
-						p2config = getMy_current_config();
-					} else {
-						accepted = true; // There was no previous Log and the config is >= than mine
-					}
+				if (getMy_current_config() > p2config){
+					p2config = getMy_current_config();
 				} else {
-					// Save p2value (reqid) if incoming priority is higher
-					if (server_state.getPaxosLogs().get(p2seqNum).getNum2() <= p2priority){
-						server_state.getPaxosLogs().get(p2seqNum).setNum1(p2value);
-						accepted = true;
-					}
-					p2config = server_state.getPaxosLogs().get(p2seqNum).getNum3(); // Send config of first value accepted
+					accepted = true; // There was no previous Log and the config is >= than mine
 				}
+			} else {
+				// Save p2value (reqid) if incoming priority is higher
+				if (server_state.getPaxosLogs().get(p2seqNum).getNum2() <= p2priority){
+					server_state.getPaxosLogs().get(p2seqNum).setNum1(p2value);
+					accepted = true;
+				}
+				p2config = server_state.getPaxosLogs().get(p2seqNum).getNum3(); // Send config of first value accepted
 			}
 		}
+		
 
 
-		if (!duplicated && accepted) {
+		if (accepted) {
 			// Inform other servers of PAXOS consensus result
 			server_state.getLearner().sendLearnRequests(p2config, p2seqNum, p2value, p2priority);
 

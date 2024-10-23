@@ -52,6 +52,11 @@ public class DadkvsServerPaxosLearner extends DadkvsServerPaxos {
 			if(!server_state.getPaxosLogs().containsKey(lseqNum)){
 				server_state.getPaxosLogs().put(lseqNum, new Triplet(lreqid, lpriority, lconfig));
 			}
+			else{
+				server_state.getPaxosLogs().get(lseqNum).setNum1(lreqid);
+				server_state.getPaxosLogs().get(lseqNum).setNum2(lpriority);
+				server_state.getPaxosLogs().get(lseqNum).setNum3(lconfig);
+			}
 		}
 		// The reply is useless, but Grpc needs it to work
 		DadkvsPaxos.LearnReply.Builder learn_reply = DadkvsPaxos.LearnReply.newBuilder();
