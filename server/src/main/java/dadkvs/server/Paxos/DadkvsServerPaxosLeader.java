@@ -7,6 +7,10 @@ import dadkvs.util.GenericResponseCollector;
 import java.util.ArrayList;
 import java.util.Iterator;
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 import dadkvs.server.*;
 
 public class DadkvsServerPaxosLeader extends DadkvsServerPaxos {
@@ -156,13 +160,36 @@ public class DadkvsServerPaxosLeader extends DadkvsServerPaxos {
 		System.out.println("[handlePhase2] Request2.phase2Value = " + phaseTwoRequest.getPhase2Value());
 		System.out.println("[handlePhase2] Request2.priority = " + phaseTwoRequest.getPriority());
 
-		for (int i = config; i < numPaxosServers + config; i++) {
+		final CountDownLatch latch = new CountDownLatch(numPaxosServers - 1);
+		final ExecutorService executor = Executors.newFixedThreadPool(numPaxosServers - 1);
+		ArrayList<Integer> serversList = server_state.makeList(config, config + numPaxosServers);
+		for (final int i : serversList) {
 			if (i != server_state.getMy_id()) {
-				CollectorStreamObserver<DadkvsPaxos.PhaseTwoReply> phaseTwo_observer = new CollectorStreamObserver<DadkvsPaxos.PhaseTwoReply>(
-						phaseTwo_collector);
-				server_state.getAsync_stubs()[i].phaseTwo(phaseTwoRequest.build(), phaseTwo_observer);
+				executor.submit(() -> {
+					try {
+						CollectorStreamObserver<DadkvsPaxos.PhaseTwoReply> phaseTwo_observer = new CollectorStreamObserver<DadkvsPaxos.PhaseTwoReply>(
+								phaseTwo_collector);
+						server_state.getAsync_stubs()[i].phaseTwo(phaseTwoRequest.build(), phaseTwo_observer);
+					} catch (RuntimeException e){
+						System.out.println("[handlePhase2] RuntimeException = " + e.getMessage());
+					} finally {
+						latch.countDown();
+					}
+				});
 			}
 		}
+
+		try {
+			System.out.println("[handlePhase2] SeqNum = " + seqNum + " (WAITING for all threads)");
+			latch.await();
+		} catch (InterruptedException e){
+			Thread.currentThread().interrupt();
+			e.printStackTrace();
+		} finally {
+			System.out.println("[handlePhase2] SeqNum = " + seqNum + " (All threads DONE)");
+			executor.shutdown();
+		}
+
 
 		// RECEIVE PHASE TWO REPLY (Accepted)
 		phaseTwo_collector.waitForTarget(1); // The majority is 2, so it's the leader plus 1
@@ -207,12 +234,34 @@ public class DadkvsServerPaxosLeader extends DadkvsServerPaxos {
 		System.out.println("[handlePhase1] Request1.seqNum = " + phaseOneRequest.getSeqNum());
 		System.out.println("[handlePhase1] Request1.priority = " + phaseOneRequest.getPriority());
 
-		for (int i = config; i < numPaxosServers + config; i++) {
+		final CountDownLatch latch = new CountDownLatch(numPaxosServers - 1);
+		final ExecutorService executor = Executors.newFixedThreadPool(numPaxosServers - 1);
+		ArrayList<Integer> serversList = server_state.makeList(config, config + numPaxosServers);
+		for (final int i : serversList) {
 			if (i != server_state.getMy_id()) {
-				CollectorStreamObserver<DadkvsPaxos.PhaseOneReply> phaseOne_observer = new CollectorStreamObserver<DadkvsPaxos.PhaseOneReply>(
-						phaseOne_collector);
-				server_state.getAsync_stubs()[i].phaseOne(phaseOneRequest.build(), phaseOne_observer);
+				executor.submit(() -> {
+					try {
+						CollectorStreamObserver<DadkvsPaxos.PhaseOneReply> phaseOne_observer = new CollectorStreamObserver<DadkvsPaxos.PhaseOneReply>(
+								phaseOne_collector);
+						server_state.getAsync_stubs()[i].phaseOne(phaseOneRequest.build(), phaseOne_observer);
+					} catch (RuntimeException e){
+						System.out.println("[handlePhase1] RuntimeException = " + e.getMessage());
+					} finally {
+						latch.countDown();
+					}
+				});
 			}
+		}
+
+		try {
+			System.out.println("[handlePhase1] SeqNum = " + seqNum + " (WAITING for all threads)");
+			latch.await();
+		} catch (InterruptedException e){
+			Thread.currentThread().interrupt();
+			e.printStackTrace();
+		} finally {
+			System.out.println("[handlePhase1] SeqNum = " + seqNum + " (All threads DONE)");
+			executor.shutdown();
 		}
 
 		// RECEIVE PHASE ONE REPLY (Promise)

@@ -6,6 +6,10 @@ import dadkvs.util.CollectorStreamObserver;
 import dadkvs.util.GenericResponseCollector;
 import java.util.ArrayList;
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 import dadkvs.server.*;
 
 
@@ -23,12 +27,34 @@ public class DadkvsServerPaxosLearner extends DadkvsServerPaxos {
 				server_state.getN_servers());
 		learnRequest.setLearnconfig(config).setSeqNum(seqNum).setLearnvalue(reqid).setPriority(priority);
 
-		for (int i = 0; i < server_state.getN_servers(); i++) {
+		final CountDownLatch latch = new CountDownLatch(server_state.getN_servers() - 1);
+		final ExecutorService executor = Executors.newFixedThreadPool(server_state.getN_servers() - 1);
+		ArrayList<Integer> serversList = server_state.makeList(0, server_state.getN_servers());
+		for (final int i : serversList) {
 			if (i != server_state.getMy_id()) {
-				CollectorStreamObserver<DadkvsPaxos.LearnReply> learn_observer = new CollectorStreamObserver<DadkvsPaxos.LearnReply>(
-						learn_collector);
-				server_state.getAsync_stubs()[i].learn(learnRequest.build(), learn_observer);
+				executor.submit(() -> {
+					try {
+						CollectorStreamObserver<DadkvsPaxos.LearnReply> learn_observer = new CollectorStreamObserver<DadkvsPaxos.LearnReply>(
+								learn_collector);
+						server_state.getAsync_stubs()[i].learn(learnRequest.build(), learn_observer);
+					} catch (RuntimeException e){
+						System.out.println("[handlePhase1] RuntimeException = " + e.getMessage());
+					} finally {
+						latch.countDown();
+					}
+				});
 			}
+		}
+
+		try {
+			System.out.println("[sendLearnRequests] SeqNum = " + seqNum + " (WAITING for all threads)");
+			latch.await();
+		} catch (InterruptedException e){
+			Thread.currentThread().interrupt();
+			e.printStackTrace();
+		} finally {
+			System.out.println("[sendLearnRequests] SeqNum = " + seqNum + " (All threads DONE)");
+			executor.shutdown();
 		}
 
 		// RECEIVE LEARN REPLY

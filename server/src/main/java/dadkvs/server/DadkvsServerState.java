@@ -355,4 +355,10 @@ public class DadkvsServerState {
                 min = pair.getNum1();
         return min;
     }
+
+    public ArrayList<Integer> makeList(int start, int end){
+        return java.util.stream.IntStream.range(start, end)
+                .boxed()
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+    }
 }
