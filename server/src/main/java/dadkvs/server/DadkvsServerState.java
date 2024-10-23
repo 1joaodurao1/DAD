@@ -335,6 +335,7 @@ public class DadkvsServerState {
     }
 
     public synchronized void removeByReqidLocalOrder(int reqidToRemove){
+        System.out.println("[localOrderList] REMOVING Pair with reqid = " + reqidToRemove);
         for (Pair pair : localOrderList){
             if (pair.getNum2() == reqidToRemove){
                 localOrderList.remove(pair);

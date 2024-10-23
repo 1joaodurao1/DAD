@@ -17,20 +17,19 @@ public class DadkvsServerPaxosLeader extends DadkvsServerPaxos {
 
 
 	public void handleUpdate(int seqNum){
-		
 		boolean continueLoop = true;
 		while( continueLoop ){
 			for ( int i = seqNum; i < seqNum + 10 ; i++){
 				synchronized(server_state.getPaxosLogs()){
 					if (!server_state.getPaxosLogs().containsKey(i))
-						server_state.getPaxosLogs().put(i, new Triplet(-1, my_current_priority, my_current_config));
+						server_state.getPaxosLogs().put(i, new Triplet(-1, -1, my_current_config));
 				}
 				int reqid = handlePhase1(i, -1, -1, true);
 				System.out.println("[handleUpdate] Im updating now for seqNum: " + i + "and found reqID: " + reqid);
 				if (reqid == -1){
 					// OUTSIDE CONFIG , act as learner or found empty consensus slot , leader can start proposing new values
 					continueLoop = false;
-					break; 
+					break;
 				}
 				int phase2result = handlePhase2(i, reqid, -1);
 				if ( phase2result == 0 ) server_state.removeByReqidLocalOrder(reqid);
@@ -49,7 +48,7 @@ public class DadkvsServerPaxosLeader extends DadkvsServerPaxos {
 		// SAVE LOG of this Consensus (reqid is "-1" because the value isn't accepted yet)
 		synchronized(server_state.getPaxosLogs()){
 			if (!server_state.getPaxosLogs().containsKey(seqNum))
-				server_state.getPaxosLogs().put(seqNum, new Triplet(-1, my_current_priority, my_current_config));
+				server_state.getPaxosLogs().put(seqNum, new Triplet(-1, -1, my_current_config));
 		}
 
 		// DO CONSENSUS number seqNum

@@ -29,6 +29,8 @@ public class DadkvsServerPaxosAcceptor extends DadkvsServerPaxos {
 			// Update priority if incoming priority is higher
 			if (server_state.getPaxosLogs().get(p1seqNum).getNum2() <= p1priority){
 				server_state.getPaxosLogs().get(p1seqNum).setNum2(p1priority); // Update highest priority
+			} else {
+				accepted = false;
 			}
 			valueReply 		= server_state.getPaxosLogs().get(p1seqNum).getNum1(); // Send value of the previous leader ("-1" means there is no value)
 			priorityReply 	= server_state.getPaxosLogs().get(p1seqNum).getNum2(); // Send highest priority received
