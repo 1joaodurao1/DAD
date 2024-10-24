@@ -19,13 +19,14 @@ public class DadkvsConsoleServiceImpl extends DadkvsConsoleServiceGrpc.DadkvsCon
 		// for debug purposes
 		System.out.println(request);
 
-		this.server_state.leader.handleUpdate(this.server_state.nextSeqNumber);
 		boolean response_value = true;
 		this.server_state.i_am_leader = request.getIsleader();
 
+		this.server_state.leader.handlePrepareAll(this.server_state.nextSeqNumber);
+
 		// for debug purposes
 		System.out.println("I am the leader = " + this.server_state.i_am_leader );
-		
+
 		this.server_state.nextSeqNumbertoPropose.set(this.server_state.nextSeqNumber);
 
 		this.server_state.notifyAllServerState();

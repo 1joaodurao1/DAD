@@ -4,6 +4,24 @@
 syntax = "proto3";
 package dadkvs;
 
+message PrepareAllRequest {
+  int32 startSeqNum = 1;
+  int32 priority    = 2;
+  int32 config      = 3;
+}
+
+message PaxosLog {
+  int32 seqNum    = 1;
+  int32 reqid     = 2;
+  int32 priority  = 3;
+  int32 config    = 4;
+}
+
+message PrepareAllReply {
+  bool accepted               = 1;
+  repeated PaxosLog paxosLogs = 2;
+}
+
 message PhaseOneRequest { // 1. Prepare
   int32 phase1config  = 1;
   int32 seqNum        = 2;
@@ -29,7 +47,6 @@ message PhaseTwoReply { // 4. Accepted
   int32 phase2config   = 1;
   int32 seqNum         = 2;
   bool  phase2accepted = 3;
-  bool  isDuplicated   = 4; // if value of phase2Req was already done on previous consensous
 }
 
 message LearnRequest { // Inform Learners of Accepted transaction
@@ -46,6 +63,7 @@ message LearnReply {  // Learners confirm recieving Accepted messages
 }
 
 service DadkvsPaxosService {
+  rpc prepareAll (PrepareAllRequest) returns (PrepareAllReply);
   rpc phaseOne (PhaseOneRequest) returns (PhaseOneReply);
   rpc phaseTwo (PhaseTwoRequest) returns (PhaseTwoReply);
   rpc learn (LearnRequest) returns (LearnReply);

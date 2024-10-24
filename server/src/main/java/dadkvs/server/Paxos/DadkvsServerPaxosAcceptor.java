@@ -9,76 +9,88 @@ import dadkvs.server.*;
 
 
 public class DadkvsServerPaxosAcceptor extends DadkvsServerPaxos {
+	int startOfEmptySeqNums = 0;
+	int priorityForInfinity = -1;
 
 	public DadkvsServerPaxosAcceptor(int config, DadkvsServerState state) {
 		super(config, state);
 	}
 
-	public DadkvsPaxos.PhaseOneReply handlePhaseOneRequest(int p1config, int p1seqNum, int p1priority) {
+	public DadkvsPaxos.PrepareAllReply handlePrepareAllRequest(int startSeqNum, int priority, int config) {
 		boolean accepted;
-		int valueReply = -1, priorityReply = p1priority, configReply = p1config;
-		DadkvsPaxos.PhaseOneReply.Builder phaseOne_reply = DadkvsPaxos.PhaseOneReply.newBuilder();
+		DadkvsPaxos.PrepareAllReply.Builder prepareAll_reply = DadkvsPaxos.PrepareAllReply.newBuilder();
 		// If I am leader, I don't accept any Prepare()s from others
 		accepted = !server_state.isI_am_leader();
 
-		synchronized(server_state.getPaxosLogs()){
-			// Add log to Map if it doesn't exist
-			if (!server_state.getPaxosLogs().containsKey(p1seqNum)){
-				server_state.getPaxosLogs().put(p1seqNum, new Triplet(-1, p1priority, p1config));
+		if (priorityForInfinity > priority){
+			accepted = false;
+		} else {
+			synchronized(server_state.getPaxosLogs()){
+				for (int i = startSeqNum; i < startOfEmptySeqNums; i++){
+					DadkvsPaxos.PaxosLog.Builder paxosLog_builder = DadkvsPaxos.PaxosLog.newBuilder();
+					if (server_state.getPaxosLogs().containsKey(i)){
+						if (server_state.getPaxosLogs().get(i).getNum2() > priority){
+							accepted = false; // Only accept if all priority values are bellow
+							break;
+						}
+						paxosLog_builder.setSeqNum(i)
+										.setReqid(server_state.getPaxosLogs().get(i).getNum1())
+										.setPriority(server_state.getPaxosLogs().get(i).getNum2())
+										.setConfig(server_state.getPaxosLogs().get(i).getNum3());
+					} else {
+						paxosLog_builder.setSeqNum(i).setReqid(-1).setPriority(-1).setConfig(-1);
+					}
+					prepareAll_reply.addPaxosLogs(paxosLog_builder.build());
+				}
+				if (accepted){ // Reserve all these consensus to only accept this priority
+					for (int i = startSeqNum; i < startOfEmptySeqNums; i++){
+						if (server_state.getPaxosLogs().containsKey(i)){
+							server_state.getPaxosLogs().get(i).setNum2(priority);
+						}
+					}
+					priorityForInfinity = priority;
+				}
 			}
-			// Update priority if incoming priority is higher
-			if (server_state.getPaxosLogs().get(p1seqNum).getNum2() <= p1priority){
-				server_state.getPaxosLogs().get(p1seqNum).setNum2(p1priority); // Update highest priority
-			} else {
-				accepted = false;
-			}
-			valueReply 		= server_state.getPaxosLogs().get(p1seqNum).getNum1(); // Send value of the previous leader ("-1" means there is no value)
-			priorityReply 	= server_state.getPaxosLogs().get(p1seqNum).getNum2(); // Send highest priority received
-			configReply 	= server_state.getPaxosLogs().get(p1seqNum).getNum3(); // Send config of first value accepted
 		}
-		phaseOne_reply.setPhase1Config(configReply)
-				.setSeqNum(p1seqNum)
-				.setAccepted(accepted)
-				.setPhase1Value(valueReply)
-				.setPriority(priorityReply);
-
+		prepareAll_reply.setAccepted(accepted);
 		// Debug messages
-		System.out.println("\n[handlePhaseOneRequest] Reply.phase1Config = " + phaseOne_reply.getPhase1Config());
-		System.out.println("[handlePhaseOneRequest] Reply.seqNum = " + phaseOne_reply.getSeqNum());
-		System.out.println("[handlePhaseOneRequest] Reply.accepted = " + phaseOne_reply.getAccepted());
-		System.out.println("[handlePhaseOneRequest] Reply.phase1Value = " + phaseOne_reply.getPhase1Value());
-		System.out.println("[handlePhaseOneRequest] Reply.priority = " + phaseOne_reply.getPriority());
-		return phaseOne_reply.build();
+		System.out.println("\n[handlePrepareAllRequest] PrepareAll.accepted = " + prepareAll_reply.getAccepted());
+		System.out.println("[handlePrepareAllRequest] PrepareAll.paxoLogs = " + prepareAll_reply.getPaxosLogsList());
+		return prepareAll_reply.build();
 	}
 
 	public DadkvsPaxos.PhaseTwoReply handlePhaseTwoRequest(int p2config, int p2seqNum, int p2value, int p2priority) {
-		boolean accepted = false, duplicated = false;
+		boolean accepted = false;
 		DadkvsPaxos.PhaseTwoReply.Builder phaseTwo_reply = DadkvsPaxos.PhaseTwoReply.newBuilder();
 
-	
 		synchronized(server_state.getPaxosLogs()){
 			// Add log to Map if it doesn't exist
 			if (!server_state.getPaxosLogs().containsKey(p2seqNum)){
 				server_state.getPaxosLogs().put(p2seqNum, new Triplet(-1, p2priority, p2config));
 
 				if (getMy_current_config() > p2config){
-					p2config = getMy_current_config();
+					p2config = getMy_current_config(); // Here accept=false
 				} else {
 					accepted = true; // There was no previous Log and the config is >= than mine
 				}
 			} else {
 				// Save p2value (reqid) if incoming priority is higher
-				if (server_state.getPaxosLogs().get(p2seqNum).getNum2() <= p2priority){
+				if (server_state.getPaxosLogs().get(p2seqNum).getNum2() == p2priority
+					&& server_state.getPaxosLogs().get(p2seqNum).getNum3() == p2config){
 					server_state.getPaxosLogs().get(p2seqNum).setNum1(p2value);
+					server_state.getReqidsDone().put(p2value, 1);
 					accepted = true;
+				} else {
+					// Here accept=false
+					p2config = server_state.getPaxosLogs().get(p2seqNum).getNum3(); // Send config of first value accepted
 				}
-				p2config = server_state.getPaxosLogs().get(p2seqNum).getNum3(); // Send config of first value accepted
 			}
 		}
-		
-
 
 		if (accepted) {
+			if(startOfEmptySeqNums <= p2seqNum){
+				startOfEmptySeqNums = p2seqNum + 1;
+			}
 			// Inform other servers of PAXOS consensus result
 			server_state.getLearner().sendLearnRequests(p2config, p2seqNum, p2value, p2priority);
 
@@ -89,8 +101,7 @@ public class DadkvsServerPaxosAcceptor extends DadkvsServerPaxos {
 
 		phaseTwo_reply.setPhase2Config(p2config)
 				.setSeqNum(p2seqNum)
-				.setPhase2Accepted(accepted)
-				.setIsDuplicated(duplicated);
+				.setPhase2Accepted(accepted);
 		// Debug messages
 		System.out.println("\n[handlePhaseTwoRequest] Reply.phase2Config = " + phaseTwo_reply.getPhase2Config());
 		System.out.println("[handlePhaseTwoRequest] Reply.seqNum = " + phaseTwo_reply.getSeqNum());

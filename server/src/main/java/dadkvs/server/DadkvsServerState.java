@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
+import java.util.Iterator;
 import java.util.concurrent.atomic.AtomicInteger;
 import dadkvs.server.Paxos.*;
 import dadkvs.DadkvsPaxosServiceGrpc;
@@ -38,6 +39,7 @@ public class DadkvsServerState {
     DadkvsServerPaxosAcceptor acceptor;
     DadkvsServerPaxosLearner learner;
     Map<Integer, Triplet> paxosLogs;
+    HashMap<Integer,Integer> reqidsDone;
 
 
     public DadkvsServerState(int kv_size, int port, int myself, int servers,
@@ -68,6 +70,7 @@ public class DadkvsServerState {
         acceptor = new DadkvsServerPaxosAcceptor(0,this);
         learner = new DadkvsServerPaxosLearner(0,this);
         paxosLogs = Collections.synchronizedMap(new HashMap<>());
+        reqidsDone = new HashMap<>();
 
         main_loop = new MainLoop(this);
         main_loop_worker = new Thread (main_loop);
@@ -96,10 +99,12 @@ public class DadkvsServerState {
                     System.out.println("[handleTRansaction]:Number of Learn Requests " + learnCounter.get(reqid).getNum2());
                 }
 
-                if (this.i_am_leader && isLeaderInConfig() && (localOrderList.size() > 0 && minLocalorder(localOrderList) == localOrder_copy)){
+                if (this.i_am_leader && isLeaderInConfig() && (localOrderList.size() > 0 && minLocalorder(localOrderList) == localOrder_copy) 
+                && (reqidsDone.size() == 0 || !reqidsDone.containsKey(reqid))){
                     System.out.println("[handleTRansaction] Im leader and starting paxos with localOrder_copy = " + localOrder_copy);
-                    // We add learnCounter.size() because there could be Transactions that were already accepted in Paxos, but that haven't yet received
-                    //  the 2nd LearnRequest, removed their learnCounter entry and, subsequently, incremented the nextSeqNum (retirei  + learnCounter.size())
+                    if (nextSeqNumbertoPropose.get() < nextSeqNumber){
+                        nextSeqNumbertoPropose.set(nextSeqNumber);
+                    }
                     this.leader.handlePaxos(nextSeqNumbertoPropose.getAndIncrement(), reqid , localOrder_copy);
                 } else {
                     try { wait ();}
@@ -174,10 +179,8 @@ public class DadkvsServerState {
                 break;
             case 3:
                 this.isFreezed = false;
-                if ( i_am_leader) this.leader.handleUpdate(nextSeqNumber);
-                synchronized(this){
-                    notifyAll();
-                }
+                leader.handlePrepareAll(nextSeqNumber);
+                synchronized(this){ notifyAll(); }
                 break;
             case 4:
                 this.isDelayed = true;
@@ -311,6 +314,10 @@ public class DadkvsServerState {
         this.paxosLogs = paxosLogs;
     }
 
+    public HashMap<Integer,Integer> getReqidsDone(){
+        return this.reqidsDone;
+    }
+
     public synchronized void updateLearnCounter(int reqid, int seqNum){
         if (!learnCounter.containsKey(reqid)) {
 			learnCounter.put(reqid, new Pair(seqNum, 1));
@@ -325,20 +332,26 @@ public class DadkvsServerState {
         notifyAll();
     }
 
-    public synchronized void removeValueLocalOrder(int valueToRemove){
-        for (Pair pair : localOrderList){
-            if (pair.getNum1() == valueToRemove){
-                localOrderList.remove(pair);
+    public synchronized void removeValueLocalOrder(int valueToRemove) {
+        Iterator<Pair> iterator = localOrderList.iterator();
+        while (iterator.hasNext()) {
+            Pair pair = iterator.next();
+            if (pair.getNum1() == valueToRemove) {
+                System.out.println("[localOrderList] REMOVING Pair with value = " + valueToRemove);
+                iterator.remove();  // Safely remove the current element
                 return;
             }
         }
     }
 
-    public synchronized void removeByReqidLocalOrder(int reqidToRemove){
-        System.out.println("[localOrderList] REMOVING Pair with reqid = " + reqidToRemove);
-        for (Pair pair : localOrderList){
-            if (pair.getNum2() == reqidToRemove){
-                localOrderList.remove(pair);
+    // Function to remove a Pair by reqid in localOrderList
+    public synchronized void removeByReqidLocalOrder(int reqidToRemove) {
+        Iterator<Pair> iterator = localOrderList.iterator();
+        while (iterator.hasNext()) {
+            Pair pair = iterator.next();
+            if (pair.getNum2() == reqidToRemove) {
+                System.out.println("[localOrderList] REMOVING Pair with reqid = " + reqidToRemove);
+                iterator.remove();  // Safely remove the current element
                 return;
             }
         }
@@ -360,5 +373,15 @@ public class DadkvsServerState {
         return java.util.stream.IntStream.range(start, end)
                 .boxed()
                 .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+    }
+
+    public void setPaxosLog(int seqNum, int reqid, int priority, int config){
+        if (!paxosLogs.containsKey(seqNum)){
+            paxosLogs.put(seqNum, new Triplet(reqid, priority, config));
+        } else {
+            paxosLogs.get(seqNum).setNum1(reqid);
+            paxosLogs.get(seqNum).setNum2(priority);
+            paxosLogs.get(seqNum).setNum3(config);
+        }
     }
 }

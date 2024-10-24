@@ -19,33 +19,32 @@ public class DadkvsServerPaxosLeader extends DadkvsServerPaxos {
 		super(config, state);
 	}
 
-
-	public void handleUpdate(int seqNum){
-		boolean continueLoop = true;
-		while( continueLoop ){
-			for ( int i = seqNum; i < seqNum + 10 ; i++){
-				synchronized(server_state.getPaxosLogs()){
-					if (!server_state.getPaxosLogs().containsKey(i))
-						server_state.getPaxosLogs().put(i, new Triplet(-1, -1, my_current_config));
-				}
-				int reqid = handlePhase1(i, -1, -1, true);
-				System.out.println("[handleUpdate] Im updating now for seqNum: " + i + "and found reqID: " + reqid);
-				if (reqid == -1){
-					// OUTSIDE CONFIG , act as learner or found empty consensus slot , leader can start proposing new values
-					continueLoop = false;
-					break;
-				}
-				int phase2result = handlePhase2(i, reqid, -1);
-				if ( phase2result == 0 ) server_state.removeByReqidLocalOrder(reqid);
+	public synchronized void handlePrepareAll(int startSeqNum){
+		DadkvsPaxos.PrepareAllReply prepareAll_reply;
+		while (server_state.isI_am_leader() && server_state.isLeaderInConfig()){
+			prepareAll_reply = sendPrepareAllRequestAndWaitForReply(startSeqNum, my_current_priority, my_current_config);
+			// Check accepted value
+			if (!prepareAll_reply.getAccepted()){
+				my_current_priority += server_state.getN_servers();
+				continue; // Try PrepareAll Again with higher priority
 			}
-			seqNum += 10;
+			// If accepted, save Logs
+			for (DadkvsPaxos.PaxosLog paxosLog : prepareAll_reply.getPaxosLogsList()){
+				if (paxosLog.getReqid() != -1){ // If it's not an empty consensus
+					synchronized(server_state.getPaxosLogs()){
+						server_state.setPaxosLog(paxosLog.getSeqNum(), paxosLog.getReqid(), paxosLog.getPriority(), paxosLog.getConfig());
+					}
+					server_state.removeByReqidLocalOrder(paxosLog.getReqid());
+					server_state.getReqidsDone().put(paxosLog.getReqid(), 1);
+				}
+			}
+			break;
 		}
-		System.out.println("[handleUpdate] Finish updating in: " + seqNum);
 	}
 
 	public void handlePaxos(int seqNum, int reqid , int localOrder_copy) {
 		int configLog = my_current_config, reqidToPropose = reqid, phase2result = 0;
-		// Delete local order copy from localOrderList to allow next transaction in multi paxos to start
+		// Allow next transaction in multi paxos to start
 		server_state.removeValueLocalOrder(localOrder_copy);
 		server_state.notifyAllServerState();
 
@@ -57,22 +56,18 @@ public class DadkvsServerPaxosLeader extends DadkvsServerPaxos {
 
 		// DO CONSENSUS number seqNum
 		while (server_state.isI_am_leader()) {
-			reqidToPropose = handlePhase1(seqNum, reqidToPropose, localOrder_copy, false);
-			if (reqidToPropose == -1){
-				break; // OUTSIDE CONFIG
-			}
-
 			phase2result = handlePhase2(seqNum, reqidToPropose, localOrder_copy); // If this is 1 you have to try phaseOne again
-			if (phase2result == 0){
-				break; // SUCCESS
-			} else if (phase2result == -1){
+			if (phase2result == -1){
 				break; // OUTSIDE CONFIG
+			} else if (phase2result == 0){
+				break; // SUCCESS
+			} else if (phase2result == 1){
+				// Phase2 was rejected due to low priority
+				handlePrepareAll(server_state.getNextSeqNumber());
 			}
 		}
 
-		if (phase2result == 2){
-			return; // It means the value was already decided in a  previous consensus, now you wait for the learnRequests for it
-		} else if (phase2result == -1){
+		if (phase2result == -1){
 			return; // I am not in the configuration for this consensus, another leader will do this consensus
 		}
 
@@ -82,59 +77,10 @@ public class DadkvsServerPaxosLeader extends DadkvsServerPaxos {
 
 		synchronized(server_state.getPaxosLogs()){
 			configLog = server_state.getPaxosLogs().get(seqNum).getNum3();
-			my_current_priority = server_state.getPaxosLogs().get(seqNum).getNum2();
 		}
 
 		// Inform other servers of PAXOS consensus result
 		server_state.getLearner().sendLearnRequests(configLog, seqNum, reqidToPropose, my_current_priority);
-	}
-
-	public int handlePhase1(int seqNum, int reqid, int localOrder_copy, boolean isNewLeader) {
-		int config;
-		while ( (server_state.isI_am_leader() && server_state.isLeaderInConfig()) || isNewLeader) {
-			synchronized(server_state.getPaxosLogs()){
-				config = server_state.getPaxosLogs().get(seqNum).getNum3(); // Update config in case the log has changed
-				// Check if I'm in the config of this particular Paxos
-				if (!(config <= server_state.getMy_id() && server_state.getMy_id() <= config + numPaxosServers - 1)){
-					return -1; // I am outside the config of this consensus, I will give up
-				}
-			}
-
-			DadkvsPaxos.PhaseOneReply phaseOne_reply = sendPhaseOneRequestAndWaitForReply(config, seqNum, my_current_priority);
-
-			// Check seqNum value
-			if (phaseOne_reply.getSeqNum() != seqNum) {
-				System.err.println("[handlePhase1] Reply1 - ERROR: Should not have received a different seqNumber!");
-			}
-			// Check reqid value
-			if (phaseOne_reply.getPhase1Value() != -1) { // PREVIOUS VALUE FOUND
-				reqid = phaseOne_reply.getPhase1Value();
-				// Add local_order_copy back to localOrderList because in this consensus you're going to re-propose an old value you found in an Acceptor
-				if ( !isNewLeader )
-					server_state.addLocalOrder(localOrder_copy, reqid);
-				synchronized(server_state.getPaxosLogs()){ // Update reqid
-					server_state.getPaxosLogs().get(seqNum).setNum1(reqid);
-				}
-			}
-			// Check config value
-			if (phaseOne_reply.getPhase1Config() != config) {
-				synchronized(server_state.getPaxosLogs()){ // Update config
-					server_state.getPaxosLogs().get(seqNum).setNum3(phaseOne_reply.getPhase1Config());
-				}
-				continue; // Try Phase One again with correct config
-			}
-			// Check accepted value
-			if (!phaseOne_reply.getAccepted()) { // IF REJECTED
-				// Update priority
-				this.my_current_priority += this.server_state.getN_servers();
-				synchronized(server_state.getPaxosLogs()){
-					server_state.getPaxosLogs().get(seqNum).setNum2(this.my_current_priority);
-				}
-			} else {
-				break; // IF ACCEPTED go to phase2
-			}
-		}
-		return reqid; // Could have been changed, so we need to give this value to phase 2
 	}
 
 	public int handlePhase2(int seqNum, int reqid , int localOrder_copy) {
@@ -143,7 +89,13 @@ public class DadkvsServerPaxosLeader extends DadkvsServerPaxos {
 			config = server_state.getPaxosLogs().get(seqNum).getNum3(); // Update config in case the log has changed
 			// Check if I'm in the config of this particular Paxos
 			if (!(config <= server_state.getMy_id() && server_state.getMy_id() <= config + numPaxosServers - 1)){
-				return -1; // I am outside the config of this consensus, I will give up
+				return -1; // GIVE UP: I am outside the config of this consensus
+			}
+			// Check if there is already a reqid to propose
+			if (server_state.getPaxosLogs().get(seqNum).getNum1() != -1
+				&& server_state.getPaxosLogs().get(seqNum).getNum1() != reqid){
+				server_state.addLocalOrder(localOrder_copy, reqid); // Try again my value in another SeqNum
+				reqid = server_state.getPaxosLogs().get(seqNum).getNum1();
 			}
 		}
 
@@ -206,20 +158,18 @@ public class DadkvsServerPaxosLeader extends DadkvsServerPaxos {
 				synchronized(server_state.getPaxosLogs()){ // Update config
 					server_state.getPaxosLogs().get(seqNum).setNum3(phaseTwo_reply.getPhase2Config());
 				}
-				return 1; // Try Phase One again with correct config
+				return 2; // Try Phase Two again with correct config
 			}
 			// Check accepted value
 			if (phaseTwo_reply.getPhase2Accepted()) {
 				return 0; // SUCCESS
 			} else {
-				// HERE you try Phase One again
-				this.my_current_priority += this.server_state.getN_servers();
-				// Check duplicate value
+				return 1; // Try Prepare All again
 			}
 		} else {
 			System.err.println("ERROR: did not receive any phase2 responses");
 		}
-		return 1; // Try Phase One again
+		return 1; // Try Prepare All again
 	}
 
 	public DadkvsPaxos.PhaseOneReply sendPhaseOneRequestAndWaitForReply(int config, int seqNum, int priority){
@@ -274,4 +224,55 @@ public class DadkvsServerPaxosLeader extends DadkvsServerPaxos {
 		}
 	}
 
+	public DadkvsPaxos.PrepareAllReply sendPrepareAllRequestAndWaitForReply(int startSeqNum, int priority, int config){
+		// SEND PREPARE ALL REQUEST
+		DadkvsPaxos.PrepareAllRequest.Builder prepareAllRequest = DadkvsPaxos.PrepareAllRequest.newBuilder();
+		ArrayList<DadkvsPaxos.PrepareAllReply> prepareAll_responses = new ArrayList<>();
+		GenericResponseCollector<DadkvsPaxos.PrepareAllReply> prepareAll_collector = new GenericResponseCollector<>(
+				prepareAll_responses, numPaxosServers);
+		prepareAllRequest.setStartSeqNum(startSeqNum).setPriority(priority).setConfig(config);
+		// Debug messages
+		System.out.println("\n[handlePrepareAll] PrepareAll.startSeqNum = " + prepareAllRequest.getStartSeqNum());
+		System.out.println("[handlePrepareAll] PrepareAll.priority = " + prepareAllRequest.getPriority());
+		System.out.println("[handlePrepareAll] PrepareAll.config = " + prepareAllRequest.getConfig());
+
+		final CountDownLatch latch = new CountDownLatch(numPaxosServers - 1);
+		final ExecutorService executor = Executors.newFixedThreadPool(numPaxosServers - 1);
+		ArrayList<Integer> serversList = server_state.makeList(config, config + numPaxosServers);
+		for (final int i : serversList) {
+			if (i != server_state.getMy_id()) {
+				executor.submit(() -> {
+					try {
+						CollectorStreamObserver<DadkvsPaxos.PrepareAllReply> prepareAll_observer = new CollectorStreamObserver<DadkvsPaxos.PrepareAllReply>(
+								prepareAll_collector);
+						server_state.getAsync_stubs()[i].prepareAll(prepareAllRequest.build(), prepareAll_observer);
+					} catch (RuntimeException e){
+						System.out.println("[handlePrepareAll] RuntimeException = " + e.getMessage());
+					} finally {
+						latch.countDown();
+					}
+				});
+			}
+		}
+
+		try {
+			System.out.println("[handlePrepareAll] StartSeqNum = " + startSeqNum + " (WAITING for all threads)");
+			latch.await();
+		} catch (InterruptedException e){
+			Thread.currentThread().interrupt();
+			e.printStackTrace();
+		} finally {
+			System.out.println("[handlePrepareAll] StartSeqNum = " + startSeqNum + " (All threads DONE)");
+			executor.shutdown();
+		}
+
+		// RECEIVE PREPARE ALL REPLY
+		prepareAll_collector.waitForTarget(1); // The majority is 2, so it's the leader plus 1
+		if (prepareAll_responses.size() >= 1) {
+			return prepareAll_responses.iterator().next();
+		} else {
+			System.err.println("ERROR: did not receive any prepare all responses");
+			return DadkvsPaxos.PrepareAllReply.newBuilder().build();
+		}
+	}
 }

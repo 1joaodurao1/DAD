@@ -23,6 +23,23 @@ public class DadkvsPaxosServiceImpl extends DadkvsPaxosServiceGrpc.DadkvsPaxosSe
 	    this.server_state = state;
     }
 
+    @Override
+    public void prepareAll(DadkvsPaxos.PrepareAllRequest request, StreamObserver<DadkvsPaxos.PrepareAllReply> responseObserver) {
+
+        if ( this.server_state.isFreezed){
+            this.server_state.freezeServer();
+        }
+        if (this.server_state.isDelayed){
+			this.server_state.insertDelay();
+		}
+
+        DadkvsPaxos.PrepareAllReply response = server_state.acceptor.handlePrepareAllRequest(request.getStartSeqNum(),
+                                                                                    request.getPriority(),
+                                                                                    request.getConfig());
+        responseObserver.onNext(response);
+        responseObserver.onCompleted();
+    }
+
 
     @Override
     public void phaseOne(DadkvsPaxos.PhaseOneRequest request, StreamObserver<DadkvsPaxos.PhaseOneReply> responseObserver) {
@@ -36,9 +53,8 @@ public class DadkvsPaxosServiceImpl extends DadkvsPaxosServiceGrpc.DadkvsPaxosSe
 			this.server_state.insertDelay();
 		}
 
-        DadkvsPaxos.PhaseOneReply response = server_state.acceptor.handlePhaseOneRequest(request.getPhase1Config(),
-                                                                                    request.getSeqNum(),
-                                                                                    request.getPriority());
+        DadkvsPaxos.PhaseOneReply response = DadkvsPaxos.PhaseOneReply.newBuilder().build();
+
         responseObserver.onNext(response);
         responseObserver.onCompleted();
     }
