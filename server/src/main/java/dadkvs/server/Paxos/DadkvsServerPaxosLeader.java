@@ -35,7 +35,7 @@ public class DadkvsServerPaxosLeader extends DadkvsServerPaxos {
 						server_state.setPaxosLog(paxosLog.getSeqNum(), paxosLog.getReqid(), paxosLog.getPriority(), paxosLog.getConfig());
 					}
 					server_state.removeByReqidLocalOrder(paxosLog.getReqid());
-					server_state.getReqidsDone().put(paxosLog.getReqid(), 1);
+					server_state.addToReqidsDone(paxosLog.getReqid());
 				}
 			}
 			break;
@@ -45,7 +45,7 @@ public class DadkvsServerPaxosLeader extends DadkvsServerPaxos {
 	public void handlePaxos(int seqNum, int reqid , int localOrder_copy) {
 		int configLog = my_current_config, reqidToPropose = reqid, phase2result = 0;
 		// Allow next transaction in multi paxos to start
-		server_state.removeValueLocalOrder(localOrder_copy);
+		server_state.removeByReqidLocalOrder(reqid);
 		server_state.notifyAllServerState();
 
 		// SAVE LOG of this Consensus (reqid is "-1" because the value isn't accepted yet)
@@ -170,58 +170,6 @@ public class DadkvsServerPaxosLeader extends DadkvsServerPaxos {
 			System.err.println("ERROR: did not receive any phase2 responses");
 		}
 		return 1; // Try Prepare All again
-	}
-
-	public DadkvsPaxos.PhaseOneReply sendPhaseOneRequestAndWaitForReply(int config, int seqNum, int priority){
-		// SEND PHASE ONE REQUEST (Prepare)
-		DadkvsPaxos.PhaseOneRequest.Builder phaseOneRequest = DadkvsPaxos.PhaseOneRequest.newBuilder();
-		ArrayList<DadkvsPaxos.PhaseOneReply> phaseOne_responses = new ArrayList<>();
-		GenericResponseCollector<DadkvsPaxos.PhaseOneReply> phaseOne_collector = new GenericResponseCollector<>(
-				phaseOne_responses, numPaxosServers);
-		phaseOneRequest.setPhase1Config(config).setSeqNum(seqNum).setPriority(priority);
-		// Debug messages
-		System.out.println("\n[handlePhase1] Request1.phase1Config = " + phaseOneRequest.getPhase1Config());
-		System.out.println("[handlePhase1] Request1.seqNum = " + phaseOneRequest.getSeqNum());
-		System.out.println("[handlePhase1] Request1.priority = " + phaseOneRequest.getPriority());
-
-		final CountDownLatch latch = new CountDownLatch(numPaxosServers - 1);
-		final ExecutorService executor = Executors.newFixedThreadPool(numPaxosServers - 1);
-		ArrayList<Integer> serversList = server_state.makeList(config, config + numPaxosServers);
-		for (final int i : serversList) {
-			if (i != server_state.getMy_id()) {
-				executor.submit(() -> {
-					try {
-						CollectorStreamObserver<DadkvsPaxos.PhaseOneReply> phaseOne_observer = new CollectorStreamObserver<DadkvsPaxos.PhaseOneReply>(
-								phaseOne_collector);
-						server_state.getAsync_stubs()[i].phaseOne(phaseOneRequest.build(), phaseOne_observer);
-					} catch (RuntimeException e){
-						System.out.println("[handlePhase1] RuntimeException = " + e.getMessage());
-					} finally {
-						latch.countDown();
-					}
-				});
-			}
-		}
-
-		try {
-			System.out.println("[handlePhase1] SeqNum = " + seqNum + " (WAITING for all threads)");
-			latch.await();
-		} catch (InterruptedException e){
-			Thread.currentThread().interrupt();
-			e.printStackTrace();
-		} finally {
-			System.out.println("[handlePhase1] SeqNum = " + seqNum + " (All threads DONE)");
-			executor.shutdown();
-		}
-
-		// RECEIVE PHASE ONE REPLY (Promise)
-		phaseOne_collector.waitForTarget(1); // The majority is 2, so it's the leader plus 1
-		if (phaseOne_responses.size() >= 1) {
-			return phaseOne_responses.iterator().next();
-		} else {
-			System.err.println("ERROR: did not receive any phase one responses");
-			return DadkvsPaxos.PhaseOneReply.newBuilder().build();
-		}
 	}
 
 	public DadkvsPaxos.PrepareAllReply sendPrepareAllRequestAndWaitForReply(int startSeqNum, int priority, int config){

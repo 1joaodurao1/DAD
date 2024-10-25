@@ -31,8 +31,6 @@ public class DadkvsConsoleServiceImpl extends DadkvsConsoleServiceGrpc.DadkvsCon
 
 		this.server_state.notifyAllServerState();
 
-		this.server_state.main_loop.wakeup();
-
 		DadkvsConsole.SetLeaderReply response = DadkvsConsole.SetLeaderReply.newBuilder()
 			.setIsleaderack(response_value).build();
 
@@ -48,7 +46,6 @@ public class DadkvsConsoleServiceImpl extends DadkvsConsoleServiceGrpc.DadkvsCon
 		boolean response_value = true;
 
 		this.server_state.handleDebug(request.getMode());
-		this.server_state.main_loop.wakeup();
 
 		// for debug purposes
 		System.out.println("Setting debug mode to = " + this.server_state.debug_mode);

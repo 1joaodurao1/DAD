@@ -1,6 +1,7 @@
 package dadkvs.server;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -17,8 +18,6 @@ public class DadkvsServerState {
     int            my_id;
     int            store_size;
     KeyValueStore  store;
-    MainLoop       main_loop;
-    Thread         main_loop_worker;
     // Stubs and communication
     ManagedChannel[]                                server_channels;
     DadkvsPaxosServiceGrpc.DadkvsPaxosServiceStub[] async_stubs;
@@ -33,55 +32,51 @@ public class DadkvsServerState {
     // Variables to control next transaction to propose (only relevant if I am leader)
     AtomicInteger       localOrderCounter;
     AtomicInteger       nextSeqNumbertoPropose;
-    ArrayList<Pair>  localOrderList;
-    // Class with handlers for Paxos execution
-    DadkvsServerPaxosLeader leader;
-    DadkvsServerPaxosAcceptor acceptor;
-    DadkvsServerPaxosLearner learner;
+    List<Pair>          localOrderList;
+    Map<Integer,Integer>  reqidsDone;
     Map<Integer, Triplet> paxosLogs;
-    HashMap<Integer,Integer> reqidsDone;
+    // Class with handlers for Paxos execution
+    DadkvsServerPaxosLeader     leader;
+    DadkvsServerPaxosAcceptor   acceptor;
+    DadkvsServerPaxosLearner    learner;
 
 
     public DadkvsServerState(int kv_size, int port, int myself, int servers,
                             DadkvsPaxosServiceGrpc.DadkvsPaxosServiceStub[] paxoStubs,
                             ManagedChannel[] channels) {
         i_am_leader = false;
-        base_port = port;
-        my_id = myself;
-        store_size = kv_size;
-        store = new KeyValueStore(kv_size);
+        base_port   = port;
+        my_id       = myself;
+        store_size  = kv_size;
+        store       = new KeyValueStore(kv_size);
 
         server_channels = channels;
-        async_stubs = paxoStubs;
-        n_servers = servers;
+        async_stubs     = paxoStubs;
+        n_servers       = servers;
 
-        debug_mode = 0;
-        isDelayed = false;
-        isFreezed = false;
+        debug_mode  = 0;
+        isDelayed   = false;
+        isFreezed   = false;
 
-        nextSeqNumber = 0;
-        learnCounter = new HashMap<>();
+        nextSeqNumber   = 0;
+        learnCounter    = new HashMap<>();
 
-        localOrderCounter = new AtomicInteger(0);
-        nextSeqNumbertoPropose = new AtomicInteger(0);
-        localOrderList = new ArrayList<Pair>();
+        localOrderCounter       = new AtomicInteger(0);
+        nextSeqNumbertoPropose  = new AtomicInteger(0);
+        localOrderList          = Collections.synchronizedList(new ArrayList<Pair>());
+        paxosLogs               = Collections.synchronizedMap(new HashMap<>());
+        reqidsDone              = Collections.synchronizedMap(new HashMap<>());
 
-        leader = new DadkvsServerPaxosLeader(0,this);
-        acceptor = new DadkvsServerPaxosAcceptor(0,this);
-        learner = new DadkvsServerPaxosLearner(0,this);
-        paxosLogs = Collections.synchronizedMap(new HashMap<>());
-        reqidsDone = new HashMap<>();
-
-        main_loop = new MainLoop(this);
-        main_loop_worker = new Thread (main_loop);
-        main_loop_worker.start();
+        leader      = new DadkvsServerPaxosLeader(0,this);
+        acceptor    = new DadkvsServerPaxosAcceptor(0,this);
+        learner     = new DadkvsServerPaxosLearner(0,this);
     }
 
 
 
     public boolean handleTransaction(int reqid, TransactionRecord record){
         int localOrder_copy = this.localOrderCounter.getAndIncrement();
-        localOrderList.add(new Pair(localOrder_copy, reqid));
+        addLocalOrder(localOrder_copy, reqid);
 
         synchronized(this){
             // Stay in this loop until you receive 2 LearnRequests for your transaction and the seqNum they have is the next one in line (nextSeqNumber)
@@ -100,7 +95,7 @@ public class DadkvsServerState {
                 }
 
                 if (this.i_am_leader && isLeaderInConfig() && (localOrderList.size() > 0 && minLocalorder(localOrderList) == localOrder_copy) 
-                && (reqidsDone.size() == 0 || !reqidsDone.containsKey(reqid))){
+                && !isInReqidsDone(reqid)){
                     System.out.println("[handleTRansaction] Im leader and starting paxos with localOrder_copy = " + localOrder_copy);
                     if (nextSeqNumbertoPropose.get() < nextSeqNumber){
                         nextSeqNumbertoPropose.set(nextSeqNumber);
@@ -112,7 +107,7 @@ public class DadkvsServerState {
                 }
             }
             System.out.println("[handleTransaction] Im a learner and im going to commit with seqNumber = " + learnCounter.get(reqid).getNum1() + "and request id " + reqid);
-            this.removeValueLocalOrder(localOrder_copy);
+            this.removeByReqidLocalOrder(reqid);
             boolean result = this.store.commit(record);
             if (result){
                 if ( record.getPrepareKey() == 0) {
@@ -274,11 +269,11 @@ public class DadkvsServerState {
         return localOrderCounter;
     }
 
-    public ArrayList<Pair> getLocalOrderList() {
+    public List<Pair> getLocalOrderList() {
         return localOrderList;
     }
 
-    public void setLocalOrderList(ArrayList<Pair> localOrderList) {
+    public void setLocalOrderList(List<Pair> localOrderList) {
         this.localOrderList = localOrderList;
     }
 
@@ -314,9 +309,23 @@ public class DadkvsServerState {
         this.paxosLogs = paxosLogs;
     }
 
-    public HashMap<Integer,Integer> getReqidsDone(){
+    public Map<Integer,Integer> getReqidsDone(){
         return this.reqidsDone;
     }
+
+    public boolean isInReqidsDone(int reqid){
+        synchronized(reqidsDone){
+            return reqidsDone.size() != 0 && reqidsDone.containsKey(reqid);
+        }
+    }
+
+    public void addToReqidsDone(int reqid){
+        synchronized(reqidsDone){
+            if (!reqidsDone.containsKey(reqid))
+                reqidsDone.put(reqid, 1);
+        }
+    }
+
 
     public synchronized void updateLearnCounter(int reqid, int seqNum){
         if (!learnCounter.containsKey(reqid)) {
@@ -332,41 +341,41 @@ public class DadkvsServerState {
         notifyAll();
     }
 
-    public synchronized void removeValueLocalOrder(int valueToRemove) {
-        Iterator<Pair> iterator = localOrderList.iterator();
-        while (iterator.hasNext()) {
-            Pair pair = iterator.next();
-            if (pair.getNum1() == valueToRemove) {
-                System.out.println("[localOrderList] REMOVING Pair with value = " + valueToRemove);
-                iterator.remove();  // Safely remove the current element
-                return;
-            }
-        }
-    }
-
     // Function to remove a Pair by reqid in localOrderList
     public synchronized void removeByReqidLocalOrder(int reqidToRemove) {
-        Iterator<Pair> iterator = localOrderList.iterator();
-        while (iterator.hasNext()) {
-            Pair pair = iterator.next();
-            if (pair.getNum2() == reqidToRemove) {
-                System.out.println("[localOrderList] REMOVING Pair with reqid = " + reqidToRemove);
-                iterator.remove();  // Safely remove the current element
-                return;
+        synchronized(localOrderList){
+            Iterator<Pair> iterator = localOrderList.iterator();
+            while (iterator.hasNext()) {
+                Pair pair = iterator.next();
+                if (pair.getNum2() == reqidToRemove) {
+                    System.out.println("[localOrderList] REMOVING Pair with reqid = " + reqidToRemove);
+                    iterator.remove();  // Safely remove the current element
+                }
             }
         }
     }
 
     public synchronized void addLocalOrder(int localOrder, int reqid){
-        localOrderList.add(new Pair(localOrder, reqid));
+        synchronized(localOrderList){
+            Iterator<Pair> iterator = localOrderList.iterator();
+            while (iterator.hasNext()) {
+                Pair pair = iterator.next();
+                if (pair.getNum2() == reqid) {
+                    return; // Item is already in list
+                }
+            }
+            localOrderList.add(new Pair(localOrder, reqid));
+        }
     }
 
-    public synchronized int minLocalorder(ArrayList<Pair> list){
-        int min = -1;
-        for (Pair pair : localOrderList)
-            if (pair.getNum1() < min || min == -1)
-                min = pair.getNum1();
-        return min;
+    public synchronized int minLocalorder(List<Pair> list){
+        synchronized(localOrderList){
+            int min = -1;
+            for (Pair pair : localOrderList)
+                if (pair.getNum1() < min || min == -1)
+                    min = pair.getNum1();
+            return min;
+        }
     }
 
     public ArrayList<Integer> makeList(int start, int end){

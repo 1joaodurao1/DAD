@@ -82,7 +82,7 @@ public class DadkvsServerPaxosAcceptor extends DadkvsServerPaxos {
 				if (server_state.getPaxosLogs().get(p2seqNum).getNum2() == p2priority
 					&& server_state.getPaxosLogs().get(p2seqNum).getNum3() == p2config){
 					server_state.getPaxosLogs().get(p2seqNum).setNum1(p2value);
-					server_state.getReqidsDone().put(p2value, 1);
+					server_state.addToReqidsDone(p2value);
 					accepted = true;
 				} else {
 					// Here accept=false
