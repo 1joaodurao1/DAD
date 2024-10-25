@@ -73,6 +73,10 @@ public class DadkvsServerPaxosAcceptor extends DadkvsServerPaxos {
 				} else {
 					accepted = true; // There was no previous Log and the config is >= than mine
 				}
+
+				if (priorityForInfinity != p2priority){
+					accepted = false; // Leader needs to prepareAll again
+				}
 			} else {
 				// Save p2value (reqid) if incoming priority is higher
 				if (server_state.getPaxosLogs().get(p2seqNum).getNum2() == p2priority
